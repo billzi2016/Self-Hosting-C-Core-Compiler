@@ -1,4 +1,11 @@
-"""模块说明：把源代码字符流拆成带精确位置的 Token 序列。"""
+"""模块说明：把源代码字符流拆成带精确位置的 Token 序列。
+
+当前版本在第一代整数子集的基础上，继续支持：
+1. `char` 关键字；
+2. 字符字面量；
+3. 字符串字面量；
+4. 数组和指针相关的 `[` `]` `&`。
+"""
 
 from __future__ import annotations
 
@@ -49,6 +56,16 @@ class Lexer:
                 # 第一代只支持十进制整数字面量，因此这里保持最简单的整数扫描逻辑。
                 text = self._scan_integer()
                 tokens.append(Token(TokenKind.INTEGER, text, start_line, start_column))
+                continue
+
+            if ch == "'":
+                text = self._scan_char_literal()
+                tokens.append(Token(TokenKind.CHAR_LITERAL, text, start_line, start_column))
+                continue
+
+            if ch == '"':
+                text = self._scan_string_literal()
+                tokens.append(Token(TokenKind.STRING_LITERAL, text, start_line, start_column))
                 continue
 
             two_char = self.source[self.index : self.index + 2]
@@ -110,6 +127,39 @@ class Lexer:
             self._advance()
         return self.source[start:self.index]
 
+    def _scan_char_literal(self) -> str:
+        start = self.index
+        self._advance()
+        if self._at_end():
+            raise LexError(f"Unterminated char literal at {self.line}:{self.column}")
+        if self._peek() == "\\":
+            self._advance()
+            if self._at_end():
+                raise LexError(f"Unterminated char literal at {self.line}:{self.column}")
+            self._advance()
+        else:
+            self._advance()
+        if self._at_end() or self._peek() != "'":
+            raise LexError(f"Unterminated char literal at {self.line}:{self.column}")
+        self._advance()
+        return self.source[start:self.index]
+
+    def _scan_string_literal(self) -> str:
+        start = self.index
+        self._advance()
+        while not self._at_end() and self._peek() != '"':
+            if self._peek() == "\\":
+                self._advance()
+                if self._at_end():
+                    raise LexError(f"Unterminated string literal at {self.line}:{self.column}")
+            if self._peek() == "\n":
+                raise LexError(f"Unterminated string literal at {self.line}:{self.column}")
+            self._advance()
+        if self._at_end():
+            raise LexError(f"Unterminated string literal at {self.line}:{self.column}")
+        self._advance()
+        return self.source[start:self.index]
+
     def _peek(self) -> str:
         return self.source[self.index]
 
@@ -132,6 +182,8 @@ _SINGLE_CHAR_TOKENS = {
     ")": TokenKind.RPAREN,
     "{": TokenKind.LBRACE,
     "}": TokenKind.RBRACE,
+    "[": TokenKind.LBRACKET,
+    "]": TokenKind.RBRACKET,
     ",": TokenKind.COMMA,
     ";": TokenKind.SEMICOLON,
     "+": TokenKind.PLUS,
@@ -140,6 +192,7 @@ _SINGLE_CHAR_TOKENS = {
     "/": TokenKind.SLASH,
     "%": TokenKind.PERCENT,
     "!": TokenKind.BANG,
+    "&": TokenKind.AMPERSAND,
     "=": TokenKind.ASSIGN,
     "<": TokenKind.LT,
     ">": TokenKind.GT,

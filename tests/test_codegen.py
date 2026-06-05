@@ -39,6 +39,19 @@ class CodegenTests(unittest.TestCase):
         text = ToolchainDriver("linux-x86_64").emit_backend_text(artifacts.optimized_program)
         self.assertIn("int seed = 3;", text)
 
+    def test_generated_c_for_advanced_features_uses_ast_backend(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            int main() {
+                char *text = "hi";
+                return text[1];
+            }
+            """
+        )
+        text = ToolchainDriver("macos-x86_64").emit_backend_text(artifacts.optimized_program)
+        self.assertIn("AST backend", text)
+        self.assertIn('char* text = "hi";', text)
+
 
 if __name__ == "__main__":
     unittest.main()

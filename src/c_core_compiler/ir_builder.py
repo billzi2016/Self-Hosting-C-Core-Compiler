@@ -19,6 +19,9 @@ class IRBuilder:
     global_names: set[str] = field(init=False, default_factory=set)
 
     def build(self) -> IRProgram:
+        if _requires_ast_backend(self.program):
+            return IRProgram(globals=[], functions=[], source_program=self.program, requires_ast_backend=True)
+
         globals_out: list[IRGlobal] = []
         functions_out: list[IRFunction] = []
         self.global_names = {
@@ -30,7 +33,7 @@ class IRBuilder:
                 globals_out.append(IRGlobal(decl.name, initializer))
             else:
                 functions_out.append(self._build_function(decl))
-        return IRProgram(globals_out, functions_out)
+        return IRProgram(globals_out, functions_out, source_program=self.program, requires_ast_backend=False)
 
     def _build_function(self, function: ast.FunctionDecl) -> IRFunction:
         self.current = IRFunction(function.name, [param.name for param in function.params])
@@ -227,6 +230,12 @@ class IRBuilder:
     def _const_eval(self, expr: ast.Expression) -> int:
         if isinstance(expr, ast.IntLiteral):
             return expr.value
+        if isinstance(expr, ast.CharLiteral):
+            body = expr.value[1:-1]
+            if body.startswith("\\"):
+                escapes = {"n": "\n", "t": "\t", "\\": "\\", "'": "'"}
+                return ord(escapes.get(body[1], body[1]))
+            return ord(body)
         if isinstance(expr, ast.UnaryExpr):
             value = self._const_eval(expr.operand)
             if expr.operator == "+":
@@ -240,3 +249,68 @@ class IRBuilder:
             right = self._const_eval(expr.right)
             return _evaluate_binary(expr.operator, left, right)
         raise ValueError("global initializer must be constant")
+
+
+def _requires_ast_backend(program: ast.Program) -> bool:
+    for decl in program.declarations:
+        if isinstance(decl, ast.GlobalVarDecl):
+            if _type_requires_ast_backend(decl.ctype):
+                return True
+            if decl.initializer is not None and _expr_requires_ast_backend(decl.initializer):
+                return True
+            continue
+        if _type_requires_ast_backend(decl.return_type):
+            return True
+        for param in decl.params:
+            if _type_requires_ast_backend(param.ctype):
+                return True
+        if _stmt_requires_ast_backend(decl.body):
+            return True
+    return False
+
+
+def _type_requires_ast_backend(ctype: ast.CType) -> bool:
+    return ctype.base != "int" or ctype.pointer_level > 0 or ctype.array_size is not None
+
+
+def _stmt_requires_ast_backend(stmt: ast.Statement) -> bool:
+    if isinstance(stmt, ast.Block):
+        return any(_stmt_requires_ast_backend(item) for item in stmt.items)
+    if isinstance(stmt, ast.VarDeclStmt):
+        return _type_requires_ast_backend(stmt.ctype) or (
+            stmt.initializer is not None and _expr_requires_ast_backend(stmt.initializer)
+        )
+    if isinstance(stmt, ast.ExpressionStmt):
+        return stmt.expression is not None and _expr_requires_ast_backend(stmt.expression)
+    if isinstance(stmt, ast.IfStmt):
+        return (
+            _expr_requires_ast_backend(stmt.condition)
+            or _stmt_requires_ast_backend(stmt.then_branch)
+            or (stmt.else_branch is not None and _stmt_requires_ast_backend(stmt.else_branch))
+        )
+    if isinstance(stmt, ast.WhileStmt):
+        return _expr_requires_ast_backend(stmt.condition) or _stmt_requires_ast_backend(stmt.body)
+    if isinstance(stmt, ast.ForStmt):
+        return (
+            (stmt.init is not None and _stmt_requires_ast_backend(stmt.init))
+            or (stmt.condition is not None and _expr_requires_ast_backend(stmt.condition))
+            or (stmt.update is not None and _expr_requires_ast_backend(stmt.update))
+            or _stmt_requires_ast_backend(stmt.body)
+        )
+    if isinstance(stmt, ast.ReturnStmt):
+        return stmt.value is not None and _expr_requires_ast_backend(stmt.value)
+    return False
+
+
+def _expr_requires_ast_backend(expr: ast.Expression) -> bool:
+    if isinstance(expr, (ast.CharLiteral, ast.StringLiteral, ast.IndexExpr)):
+        return True
+    if isinstance(expr, ast.UnaryExpr):
+        return expr.operator in {"&", "*"} or _expr_requires_ast_backend(expr.operand)
+    if isinstance(expr, ast.BinaryExpr):
+        return _expr_requires_ast_backend(expr.left) or _expr_requires_ast_backend(expr.right)
+    if isinstance(expr, ast.AssignExpr):
+        return _expr_requires_ast_backend(expr.target) or _expr_requires_ast_backend(expr.value)
+    if isinstance(expr, ast.CallExpr):
+        return any(_expr_requires_ast_backend(arg) for arg in expr.args)
+    return False

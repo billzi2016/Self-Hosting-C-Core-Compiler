@@ -43,6 +43,13 @@ class LexerTests(unittest.TestCase):
         values = [token.value for token in tokens[:-1]]
         self.assertEqual(values, ["int", "main", "(", ")", "{", "return", "1", ";", "}"])
 
+    def test_char_and_string_literals_are_recognized(self) -> None:
+        tokens = tokens_from_source("""char c = 'a'; char *s = "hi";""")
+        kinds = [token.kind for token in tokens[:-1]]
+        self.assertIn(TokenKind.KW_CHAR, kinds)
+        self.assertIn(TokenKind.CHAR_LITERAL, kinds)
+        self.assertIn(TokenKind.STRING_LITERAL, kinds)
+
     def test_locations_are_recorded(self) -> None:
         tokens = tokens_from_source("int\n  main")
         self.assertEqual((tokens[1].line, tokens[1].column), (2, 3))

@@ -25,8 +25,16 @@ class Optimizer:
     def run(self) -> IRProgram:
         """按固定顺序执行一组保守优化。"""
 
+        if self.program.requires_ast_backend:
+            return self.program
+
         optimized_functions = [self._optimize_function(function) for function in self.program.functions]
-        return IRProgram(globals=self.program.globals, functions=optimized_functions)
+        return IRProgram(
+            globals=self.program.globals,
+            functions=optimized_functions,
+            source_program=self.program.source_program,
+            requires_ast_backend=self.program.requires_ast_backend,
+        )
 
     def _optimize_function(self, function: IRFunction) -> IRFunction:
         folded = self._fold_constants(function)

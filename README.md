@@ -28,6 +28,17 @@
 - 比较运算：`== != < <= > >=`
 - 逻辑运算：`&& ||`
 
+## 当前已支持的扩展能力
+
+- `char`
+- 字符字面量
+- 字符串字面量
+- 固定长度数组声明
+- 数组索引
+- 基础指针声明
+- `&` 取地址
+- `*` 解引用
+
 ## 编译流程
 
 1. Lexer 将字符流拆成 Token
@@ -88,6 +99,10 @@ python3 -m c_core_compiler examples/hello.c --emit-asm
 - `TASKS.md`：一期、二期任务清单
 - `ARCHITECTURE.md`：模块设计与数据流
 - `TESTING.md`：测试策略与覆盖说明
+- `CONTRIBUTING.md`：协作与提交规范
+- `DEVELOPMENT.md`：开发流程与模块说明
+- `RELEASE.md`：版本摘要与限制
+- `EXAMPLES.md`：示例说明与常用命令
 
 ## 致谢
 

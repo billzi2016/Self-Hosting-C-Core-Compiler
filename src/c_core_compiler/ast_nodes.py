@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field, fields
 from typing import Iterable
 
 
@@ -18,18 +18,35 @@ class Program(Node):
 
 
 @dataclass(slots=True)
+class CType:
+    """表示一个足够小但可扩展的 C 类型描述。
+
+    - `base` 目前支持 `int` 和 `char`
+    - `pointer_level` 表示指针层级，例如 `char**` 为 2
+    - `array_size` 用于固定长度数组
+    """
+
+    base: str
+    pointer_level: int = 0
+    array_size: int | None = None
+
+
+@dataclass(slots=True)
 class Parameter(Node):
+    ctype: CType
     name: str
 
 
 @dataclass(slots=True)
 class GlobalVarDecl(Node):
+    ctype: CType
     name: str
     initializer: "Expression | None"
 
 
 @dataclass(slots=True)
 class FunctionDecl(Node):
+    return_type: CType
     name: str
     params: list[Parameter]
     body: "Block"
@@ -50,6 +67,7 @@ class Block(Statement):
 
 @dataclass(slots=True)
 class VarDeclStmt(Statement):
+    ctype: CType
     name: str
     initializer: "Expression | None"
 
@@ -96,6 +114,16 @@ class IntLiteral(Expression):
 
 
 @dataclass(slots=True)
+class CharLiteral(Expression):
+    value: str
+
+
+@dataclass(slots=True)
+class StringLiteral(Expression):
+    value: str
+
+
+@dataclass(slots=True)
 class Name(Expression):
     identifier: str
 
@@ -117,6 +145,12 @@ class BinaryExpr(Expression):
 class CallExpr(Expression):
     callee: str
     args: list[Expression] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class IndexExpr(Expression):
+    target: Expression
+    index: Expression
 
 
 @dataclass(slots=True)

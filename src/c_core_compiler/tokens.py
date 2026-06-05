@@ -7,13 +7,16 @@ from enum import Enum, auto
 
 
 class TokenKind(Enum):
-    """枚举所有第一代编译器需要识别的 Token 类型。"""
+    """枚举当前编译器需要识别的 Token 类型。"""
 
     EOF = auto()
     IDENTIFIER = auto()
     INTEGER = auto()
+    CHAR_LITERAL = auto()
+    STRING_LITERAL = auto()
 
     KW_INT = auto()
+    KW_CHAR = auto()
     KW_IF = auto()
     KW_ELSE = auto()
     KW_WHILE = auto()
@@ -24,6 +27,8 @@ class TokenKind(Enum):
     RPAREN = auto()
     LBRACE = auto()
     RBRACE = auto()
+    LBRACKET = auto()
+    RBRACKET = auto()
     COMMA = auto()
     SEMICOLON = auto()
 
@@ -33,6 +38,7 @@ class TokenKind(Enum):
     SLASH = auto()
     PERCENT = auto()
     BANG = auto()
+    AMPERSAND = auto()
     ASSIGN = auto()
 
     EQ = auto()
@@ -47,6 +53,7 @@ class TokenKind(Enum):
 
 KEYWORDS = {
     "int": TokenKind.KW_INT,
+    "char": TokenKind.KW_CHAR,
     "if": TokenKind.KW_IF,
     "else": TokenKind.KW_ELSE,
     "while": TokenKind.KW_WHILE,

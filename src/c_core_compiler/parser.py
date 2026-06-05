@@ -34,18 +34,18 @@ class Parser:
         # 第一代顶层只支持两类声明：
         # 1. 全局变量声明
         # 2. 函数定义
-        int_token = self._consume(TokenKind.KW_INT, "expected 'int' at top level")
-        name = self._consume(TokenKind.IDENTIFIER, "expected identifier after 'int'")
+        type_token, base_type = self._parse_type_spec()
+        name, decl_type = self._parse_declarator(base_type)
         if self._match(TokenKind.LPAREN):
             params = self._parse_parameters()
             body = self._parse_block()
-            return ast.FunctionDecl(int_token.line, int_token.column, name.value, params, body)
+            return ast.FunctionDecl(type_token.line, type_token.column, decl_type, name, params, body)
 
         initializer = None
         if self._match(TokenKind.ASSIGN):
             initializer = self._parse_expression()
         self._consume(TokenKind.SEMICOLON, "expected ';' after global declaration")
-        return ast.GlobalVarDecl(int_token.line, int_token.column, name.value, initializer)
+        return ast.GlobalVarDecl(type_token.line, type_token.column, decl_type, name, initializer)
 
     def _parse_parameters(self) -> list[ast.Parameter]:
         params: list[ast.Parameter] = []
@@ -53,9 +53,9 @@ class Parser:
             return params
 
         while True:
-            int_token = self._consume(TokenKind.KW_INT, "expected 'int' in parameter list")
-            name = self._consume(TokenKind.IDENTIFIER, "expected parameter name")
-            params.append(ast.Parameter(int_token.line, int_token.column, name.value))
+            type_token, base_type = self._parse_type_spec()
+            name, decl_type = self._parse_declarator(base_type)
+            params.append(ast.Parameter(type_token.line, type_token.column, decl_type, name))
             if self._match(TokenKind.RPAREN):
                 return params
             self._consume(TokenKind.COMMA, "expected ',' between parameters")
@@ -81,8 +81,9 @@ class Parser:
             return self._parse_for()
         if self._match(TokenKind.KW_RETURN):
             return self._parse_return()
-        if self._match(TokenKind.KW_INT):
-            return self._parse_var_decl_after_int(self._previous())
+        if self._check(TokenKind.KW_INT, TokenKind.KW_CHAR):
+            type_token, base_type = self._parse_type_spec()
+            return self._parse_var_decl_after_type(type_token.line, type_token.column, base_type)
         if self._match(TokenKind.SEMICOLON):
             token = self._previous()
             return ast.ExpressionStmt(token.line, token.column, None)
@@ -115,10 +116,11 @@ class Parser:
         init: ast.Statement | None
         if self._match(TokenKind.SEMICOLON):
             init = None
-        elif self._match(TokenKind.KW_INT):
+        elif self._check(TokenKind.KW_INT, TokenKind.KW_CHAR):
             # for 的初始化部分允许直接写变量声明，例如：
             # for (int i = 0; i < 10; i = i + 1)
-            init = self._parse_var_decl_after_int(self._previous())
+            type_token, base_type = self._parse_type_spec()
+            init = self._parse_var_decl_after_type(type_token.line, type_token.column, base_type)
         else:
             expr = self._parse_expression()
             self._consume(TokenKind.SEMICOLON, "expected ';' after for initializer")
@@ -144,13 +146,13 @@ class Parser:
         self._consume(TokenKind.SEMICOLON, "expected ';' after return")
         return ast.ReturnStmt(keyword.line, keyword.column, value)
 
-    def _parse_var_decl_after_int(self, int_token: Token) -> ast.VarDeclStmt:
-        name = self._consume(TokenKind.IDENTIFIER, "expected variable name after 'int'")
+    def _parse_var_decl_after_type(self, line: int, column: int, base_type: ast.CType) -> ast.VarDeclStmt:
+        name, decl_type = self._parse_declarator(base_type)
         initializer = None
         if self._match(TokenKind.ASSIGN):
             initializer = self._parse_expression()
         self._consume(TokenKind.SEMICOLON, "expected ';' after variable declaration")
-        return ast.VarDeclStmt(int_token.line, int_token.column, name.value, initializer)
+        return ast.VarDeclStmt(line, column, decl_type, name, initializer)
 
     def _parse_expression(self) -> ast.Expression:
         return self._parse_assignment()
@@ -212,7 +214,7 @@ class Parser:
         return expr
 
     def _parse_unary(self) -> ast.Expression:
-        if self._match(TokenKind.PLUS, TokenKind.MINUS, TokenKind.BANG):
+        if self._match(TokenKind.PLUS, TokenKind.MINUS, TokenKind.BANG, TokenKind.AMPERSAND, TokenKind.STAR):
             operator = self._previous()
             operand = self._parse_unary()
             return ast.UnaryExpr(operator.line, operator.column, operator.value, operand)
@@ -220,24 +222,38 @@ class Parser:
 
     def _parse_postfix(self) -> ast.Expression:
         expr = self._parse_primary()
-        while self._match(TokenKind.LPAREN):
-            if not isinstance(expr, ast.Name):
-                raise self._error(self._previous(), "only named functions can be called")
-            args: list[ast.Expression] = []
-            if not self._check(TokenKind.RPAREN):
-                while True:
-                    args.append(self._parse_expression())
-                    if not self._match(TokenKind.COMMA):
-                        break
-            right_paren = self._consume(TokenKind.RPAREN, "expected ')' after arguments")
-            # 第一代只支持“按名字调用函数”，不支持函数指针或更复杂的调用形式。
-            expr = ast.CallExpr(right_paren.line, right_paren.column, expr.identifier, args)
+        while True:
+            if self._match(TokenKind.LPAREN):
+                if not isinstance(expr, ast.Name):
+                    raise self._error(self._previous(), "only named functions can be called")
+                args: list[ast.Expression] = []
+                if not self._check(TokenKind.RPAREN):
+                    while True:
+                        args.append(self._parse_expression())
+                        if not self._match(TokenKind.COMMA):
+                            break
+                right_paren = self._consume(TokenKind.RPAREN, "expected ')' after arguments")
+                # 当前版本只支持“按名字调用函数”，不支持函数指针调用。
+                expr = ast.CallExpr(right_paren.line, right_paren.column, expr.identifier, args)
+                continue
+            if self._match(TokenKind.LBRACKET):
+                index = self._parse_expression()
+                right_bracket = self._consume(TokenKind.RBRACKET, "expected ']' after index expression")
+                expr = ast.IndexExpr(right_bracket.line, right_bracket.column, expr, index)
+                continue
+            break
         return expr
 
     def _parse_primary(self) -> ast.Expression:
         if self._match(TokenKind.INTEGER):
             token = self._previous()
             return ast.IntLiteral(token.line, token.column, int(token.value))
+        if self._match(TokenKind.CHAR_LITERAL):
+            token = self._previous()
+            return ast.CharLiteral(token.line, token.column, token.value)
+        if self._match(TokenKind.STRING_LITERAL):
+            token = self._previous()
+            return ast.StringLiteral(token.line, token.column, token.value)
         if self._match(TokenKind.IDENTIFIER):
             token = self._previous()
             return ast.Name(token.line, token.column, token.value)
@@ -271,3 +287,31 @@ class Parser:
 
     def _error(self, token: Token, message: str) -> ParseError:
         return ParseError(f"{message} at {token.line}:{token.column}")
+
+    def _parse_type_spec(self) -> tuple[Token, ast.CType]:
+        if self._match(TokenKind.KW_INT):
+            token = self._previous()
+            return token, ast.CType("int")
+        if self._match(TokenKind.KW_CHAR):
+            token = self._previous()
+            return token, ast.CType("char")
+        token = self._peek()
+        raise self._error(token, "expected type specifier")
+
+    def _parse_declarator(self, base_type: ast.CType) -> tuple[str, ast.CType]:
+        pointer_level = 0
+        while self._match(TokenKind.STAR):
+            pointer_level += 1
+
+        name_token = self._consume(TokenKind.IDENTIFIER, "expected declarator name")
+        array_size = None
+        if self._match(TokenKind.LBRACKET):
+            if self._check(TokenKind.RBRACKET):
+                self._consume(TokenKind.RBRACKET, "expected ']' after array declarator")
+            else:
+                size_token = self._consume(TokenKind.INTEGER, "expected array size integer")
+                array_size = int(size_token.value)
+                self._consume(TokenKind.RBRACKET, "expected ']' after array size")
+
+        decl_type = ast.CType(base_type.base, pointer_level=pointer_level, array_size=array_size)
+        return name_token.value, decl_type

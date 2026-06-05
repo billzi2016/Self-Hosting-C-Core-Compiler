@@ -30,10 +30,15 @@ class IRFunction:
 class IRProgram:
     globals: list[IRGlobal]
     functions: list[IRFunction]
+    source_program: object | None = None
+    requires_ast_backend: bool = False
 
 
 def format_ir(program: IRProgram) -> str:
     """把 IR 渲染成稳定文本，方便测试快照和人工检查。"""
+
+    if program.requires_ast_backend:
+        return "high_level_program: uses AST backend for advanced language features"
 
     lines: list[str] = []
     for global_var in program.globals:

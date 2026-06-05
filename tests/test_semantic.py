@@ -67,6 +67,19 @@ class SemanticTests(unittest.TestCase):
             """
         )
 
+    def test_accepts_pointer_and_array_assignment_targets(self) -> None:
+        analyze(
+            """
+            int main() {
+                int values[2];
+                int *ptr = &values[0];
+                values[0] = 5;
+                *ptr = values[0] + 1;
+                return values[0];
+            }
+            """
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

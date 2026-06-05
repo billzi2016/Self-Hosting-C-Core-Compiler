@@ -61,6 +61,70 @@ class EndToEndTests(unittest.TestCase):
             result = subprocess.run([str(output)], check=False)
             self.assertEqual(result.returncode, 8)
 
+    def test_builds_and_runs_char_program(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            int main() {
+                char c = 'A';
+                return c;
+            }
+            """
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "char_case"
+            ToolchainDriver(detect_default_target()).build_executable(artifacts.optimized_program, output)
+            result = subprocess.run([str(output)], check=False)
+            self.assertEqual(result.returncode, 65)
+
+    def test_builds_and_runs_array_program(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            int main() {
+                int values[3];
+                values[0] = 2;
+                values[1] = 3;
+                values[2] = values[0] + values[1];
+                return values[2];
+            }
+            """
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "array_case"
+            ToolchainDriver(detect_default_target()).build_executable(artifacts.optimized_program, output)
+            result = subprocess.run([str(output)], check=False)
+            self.assertEqual(result.returncode, 5)
+
+    def test_builds_and_runs_pointer_program(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            int main() {
+                int value = 9;
+                int *ptr = &value;
+                return *ptr;
+            }
+            """
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "pointer_case"
+            ToolchainDriver(detect_default_target()).build_executable(artifacts.optimized_program, output)
+            result = subprocess.run([str(output)], check=False)
+            self.assertEqual(result.returncode, 9)
+
+    def test_builds_and_runs_string_index_program(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            int main() {
+                char *text = "hi";
+                return text[1];
+            }
+            """
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "string_case"
+            ToolchainDriver(detect_default_target()).build_executable(artifacts.optimized_program, output)
+            result = subprocess.run([str(output)], check=False)
+            self.assertEqual(result.returncode, 105)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -122,23 +122,33 @@ class SemanticAnalyzer:
     def _visit_expr(self, expr: ast.Expression) -> None:
         if isinstance(expr, ast.IntLiteral):
             return
+        if isinstance(expr, ast.CharLiteral):
+            return
+        if isinstance(expr, ast.StringLiteral):
+            return
         if isinstance(expr, ast.Name):
             symbol = self.variables.lookup(expr.identifier)
             if symbol is None or symbol.kind == "function":
                 self._error(expr, f"undefined variable '{expr.identifier}'")
             return
         if isinstance(expr, ast.UnaryExpr):
+            if expr.operator == "&":
+                if not isinstance(expr.operand, (ast.Name, ast.IndexExpr)):
+                    self._error(expr, "address-of operand must be a variable or indexed element")
             self._visit_expr(expr.operand)
             return
         if isinstance(expr, ast.BinaryExpr):
             self._visit_expr(expr.left)
             self._visit_expr(expr.right)
             return
+        if isinstance(expr, ast.IndexExpr):
+            self._visit_expr(expr.target)
+            self._visit_expr(expr.index)
+            return
         if isinstance(expr, ast.AssignExpr):
-            if not isinstance(expr.target, ast.Name):
-                # 这里明确限制左值必须是名字，
-                # 是为了先把“变量赋值”这条链路做清楚。
-                self._error(expr.target, "assignment target must be a named variable")
+            if not self._is_assignable_target(expr.target):
+                # 对二期支持的左值来说，允许名字、解引用和数组索引三类形式。
+                self._error(expr.target, "assignment target must be a variable, dereference, or indexed element")
             self._visit_expr(expr.target)
             self._visit_expr(expr.value)
             return
@@ -153,9 +163,20 @@ class SemanticAnalyzer:
             return
         raise AssertionError(f"unhandled expression type: {type(expr)!r}")
 
+    def _is_assignable_target(self, expr: ast.Expression) -> bool:
+        if isinstance(expr, ast.Name):
+            return True
+        if isinstance(expr, ast.IndexExpr):
+            return True
+        if isinstance(expr, ast.UnaryExpr) and expr.operator == "*":
+            return True
+        return False
+
     def _ensure_const_expr(self, expr: ast.Expression) -> int:
         if isinstance(expr, ast.IntLiteral):
             return expr.value
+        if isinstance(expr, ast.CharLiteral):
+            return _decode_char_literal(expr.value)
         if isinstance(expr, ast.UnaryExpr):
             value = self._ensure_const_expr(expr.operand)
             if expr.operator == "+":
@@ -202,3 +223,13 @@ def _evaluate_binary(operator: str, left: int, right: int) -> int:
     if operator == "||":
         return int(bool(left) or bool(right))
     raise AssertionError(f"unsupported constant operator: {operator}")
+
+
+def _decode_char_literal(text: str) -> int:
+    """把 `'a'` 或 `'\n'` 这样的字符字面量转成整数值。"""
+
+    body = text[1:-1]
+    if body.startswith("\\"):
+        escapes = {"n": "\n", "t": "\t", "\\": "\\", "'": "'"}
+        return ord(escapes.get(body[1], body[1]))
+    return ord(body)

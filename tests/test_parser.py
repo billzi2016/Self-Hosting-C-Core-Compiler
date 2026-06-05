@@ -60,6 +60,28 @@ class ParserTests(unittest.TestCase):
         with self.assertRaises(ParseError):
             program_from_source("int main() { return 1 }")
 
+    def test_parses_char_pointer_and_array_declarations(self) -> None:
+        program = program_from_source(
+            """
+            char first(char *text) {
+                char letter = text[0];
+                return letter;
+            }
+
+            int main() {
+                int values[3];
+                int *ptr = &values[0];
+                return *ptr;
+            }
+            """
+        )
+        function = program.declarations[0]
+        self.assertEqual(function.return_type.base, "char")
+        self.assertEqual(function.params[0].ctype.pointer_level, 1)
+        main_fn = program.declarations[1]
+        array_decl = main_fn.body.items[0]
+        self.assertEqual(array_decl.ctype.array_size, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

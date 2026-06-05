@@ -61,6 +61,16 @@ class CLITests(unittest.TestCase):
                 main([str(source_path)])
             self.assertEqual(ctx.exception.code, 2)
 
+    def test_emit_ir_for_advanced_program_reports_ast_backend_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = Path(tmp) / "advanced.c"
+            source_path.write_text('int main() { char *text = "hi"; return text[1]; }', encoding="utf-8")
+            buffer = io.StringIO()
+            with redirect_stdout(buffer):
+                exit_code = main([str(source_path), "--emit-ir"])
+            self.assertEqual(exit_code, 0)
+            self.assertIn("high_level_program", buffer.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
