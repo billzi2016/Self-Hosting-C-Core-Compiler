@@ -140,6 +140,33 @@ class EndToEndTests(unittest.TestCase):
             self.assertEqual(result.returncode, 7)
             self.assertEqual(result.stdout, "7\n")
 
+    def test_fibonacci_sequence_stdout_is_human_readable(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            int fib(int n) {
+                if (n < 2) {
+                    return n;
+                }
+                return fib(n - 1) + fib(n - 2);
+            }
+
+            int main() {
+                int i = 1;
+                while (i <= 7) {
+                    print_int(fib(i));
+                    i = i + 1;
+                }
+                return 0;
+            }
+            """
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "fib_sequence_case"
+            ToolchainDriver(detect_default_target()).build_executable(artifacts.optimized_program, output)
+            result = subprocess.run([str(output)], check=False, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "1\n1\n2\n3\n5\n8\n13\n")
+
 
 if __name__ == "__main__":
     unittest.main()

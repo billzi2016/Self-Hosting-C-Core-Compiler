@@ -1,0 +1,8 @@
+array_demo exit=7 stdout=<empty>
+char_demo exit=1 stdout=<empty>
+control_flow_demo exit=8 stdout=<empty>
+factorial exit=120 stdout=<empty>
+fib exit=8 stdout=<empty>
+hello exit=0 stdout=<empty>
+pointer_demo exit=9 stdout=<empty>
+string_demo exit=105 stdout=<empty>

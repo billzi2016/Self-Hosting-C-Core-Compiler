@@ -2,6 +2,7 @@ array_demo_stdout exit=0 stdout=7
 char_demo_stdout exit=0 stdout=1
 control_flow_demo_stdout exit=0 stdout=8
 factorial_stdout exit=0 stdout=120
+fib_sequence_stdout exit=0 stdout=11235813
 fib_stdout exit=0 stdout=8
 hello_stdout exit=0 stdout=0
 pointer_demo_stdout exit=0 stdout=9

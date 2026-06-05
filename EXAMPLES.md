@@ -44,6 +44,7 @@
 - `examples/hello_stdout.c`
 - `examples/factorial_stdout.c`
 - `examples/fib_stdout.c`
+- `examples/fib_sequence_stdout.c`
 - `examples/control_flow_demo_stdout.c`
 - `examples/char_demo_stdout.c`
 - `examples/array_demo_stdout.c`
@@ -69,6 +70,13 @@ python3 -m c_core_compiler examples/pointer_demo.c -o build/pointer_demo
 ```bash
 python3 -m c_core_compiler examples/pointer_demo_stdout.c -o build/pointer_demo_stdout
 ./build/pointer_demo_stdout
+```
+
+编译并运行斐波那契数列展示示例：
+
+```bash
+python3 -m c_core_compiler examples/fib_sequence_stdout.c -o build/fib_sequence_stdout
+./build/fib_sequence_stdout
 ```
 
 输出 IR：

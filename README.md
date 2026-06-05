@@ -63,6 +63,13 @@ python3 -m c_core_compiler examples/fib_stdout.c -o build/fib_stdout
 ./build/fib_stdout
 ```
 
+如果你想看“一眼就知道对不对”的展示型输出，建议运行完整序列版本：
+
+```bash
+python3 -m c_core_compiler examples/fib_sequence_stdout.c -o build/fib_sequence_stdout
+./build/fib_sequence_stdout
+```
+
 ## 常用命令
 
 输出 Token：
@@ -180,6 +187,13 @@ python3 -m c_core_compiler examples/fib_stdout.c -o build/fib_stdout
 ./build/fib_stdout
 ```
 
+`fib_sequence_stdout.c`
+
+```bash
+python3 -m c_core_compiler examples/fib_sequence_stdout.c -o build/fib_sequence_stdout
+./build/fib_sequence_stdout
+```
+
 `control_flow_demo_stdout.c`
 
 ```bash
@@ -214,6 +228,73 @@ python3 -m c_core_compiler examples/pointer_demo_stdout.c -o build/pointer_demo_
 python3 -m c_core_compiler examples/string_demo_stdout.c -o build/string_demo_stdout
 ./build/string_demo_stdout
 ```
+
+## 批量运行全部示例
+
+批量编译并运行全部基础示例，并把结果分别保存到 `build/results_return/<示例名>/`：
+
+```bash
+mkdir -p build/results_return
+for f in examples/*.c; do
+  if [[ "$f" == *_stdout.c ]]; then
+    continue
+  fi
+  name=$(basename "$f" .c)
+  mkdir -p "build/results_return/$name"
+  PYTHONPATH=src python3 -m c_core_compiler "$f" -o "build/results_return/$name/program"
+  "build/results_return/$name/program" > "build/results_return/$name/stdout.txt" 2> "build/results_return/$name/stderr.txt"
+  printf "%s\n" "$?" > "build/results_return/$name/exit.txt"
+done
+```
+
+批量编译并运行全部带标准输出的示例，并把结果分别保存到 `build/results_stdout/<示例名>/`：
+
+```bash
+mkdir -p build/results_stdout
+for f in examples/*_stdout.c; do
+  name=$(basename "$f" .c)
+  mkdir -p "build/results_stdout/$name"
+  PYTHONPATH=src python3 -m c_core_compiler "$f" -o "build/results_stdout/$name/program"
+  "build/results_stdout/$name/program" > "build/results_stdout/$name/stdout.txt" 2> "build/results_stdout/$name/stderr.txt"
+  printf "%s\n" "$?" > "build/results_stdout/$name/exit.txt"
+done
+```
+
+## 示例结果文件
+
+这里有一个很重要的区别：
+
+- `return`
+  - 表示程序退出码
+  - 更适合做验证型示例
+  - 适合测试“程序最终算出来的值对不对”
+
+- `stdout`
+  - 表示程序打印到标准输出的内容
+  - 更适合做展示型示例
+  - 适合直接展示“程序运行后给人看的结果是什么”
+
+因此：
+
+- `build/results_return/` 主要看退出码
+- `build/results_stdout/` 主要看标准输出
+
+基础示例运行结果保存在：
+
+- `build/results_return/`
+- 每个示例一个子目录，例如：`build/results_return/factorial/`
+- 总表：`build/results_return/run_results.txt`
+
+带标准输出的示例运行结果保存在：
+
+- `build/results_stdout/`
+- 每个示例一个子目录，例如：`build/results_stdout/fib_sequence_stdout/`
+- 总表：`build/results_stdout/run_results.txt`
+
+如果你想看最适合公开展示的结果，优先看：
+
+- `examples/fib_sequence_stdout.c`
+- 结果文件：`build/results_stdout/fib_sequence_stdout/stdout.txt`
 
 ## 目录说明
 
