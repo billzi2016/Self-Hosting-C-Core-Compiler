@@ -14,29 +14,47 @@ class SemanticError(ValueError):
 
 @dataclass(slots=True)
 class SemanticAnalyzer:
-    """执行第一代所需的严格但范围可控的语义检查。"""
+    """执行语义检查。支持 void、struct、break/continue、cast、extern 调用等扩展特性。"""
 
     program: ast.Program
     functions: dict[str, ast.FunctionDecl] = field(init=False, default_factory=dict)
     globals: dict[str, ast.GlobalVarDecl] = field(init=False, default_factory=dict)
     variables: SymbolTable = field(init=False, default_factory=SymbolTable)
+    typedef_names: set[str] = field(init=False, default_factory=set)
+    struct_names: set[str] = field(init=False, default_factory=set)
     _saw_return: bool = field(init=False, default=False)
+    _current_return_void: bool = field(init=False, default=False)
+    _loop_depth: int = field(init=False, default=0)
 
     def analyze(self) -> None:
-        # 先收集顶层名字，目的是尽早发现重名问题，
-        # 同时让函数之间可以互相调用。
-        self.functions: dict[str, ast.FunctionDecl] = {}
-        self.globals: dict[str, ast.GlobalVarDecl] = {}
+        self.functions = {}
+        self.globals = {}
         self.variables = SymbolTable()
         self._install_builtin_functions()
 
+        # 第一遍：收集顶层名字（struct / typedef / 全局变量 / 函数）
         for decl in self.program.declarations:
+            if isinstance(decl, ast.StructDecl):
+                if decl.tag:
+                    self.struct_names.add(decl.tag)
+                if decl.alias:
+                    self.typedef_names.add(decl.alias)
+                continue
+            if isinstance(decl, ast.TypedefDecl):
+                self.typedef_names.add(decl.alias)
+                continue
+            if isinstance(decl, ast.FuncPrototype):
+                # 注册为已知函数；arity=-1 表示可接受任意参数数量
+                arity = -1 if decl.is_variadic else len(decl.params)
+                self.variables.define(Symbol(decl.name, "function", arity=arity))
+                continue
             if isinstance(decl, ast.GlobalVarDecl):
                 if decl.name in self.globals or decl.name in self.functions:
                     self._error(decl, f"duplicate top-level name '{decl.name}'")
                 self.globals[decl.name] = decl
                 self.variables.define(Symbol(decl.name, "global"))
-            else:
+                continue
+            if isinstance(decl, ast.FunctionDecl):
                 if decl.name in self.globals or decl.name in self.functions:
                     self._error(decl, f"duplicate top-level name '{decl.name}'")
                 self.functions[decl.name] = decl
@@ -44,16 +62,17 @@ class SemanticAnalyzer:
         for function in self.functions.values():
             self.variables.define(Symbol(function.name, "function", arity=len(function.params)))
 
+        # 第二遍：检查全局变量初始化表达式
         for global_decl in self.globals.values():
             if global_decl.initializer is not None:
-                # 第一代把全局初始化限制为常量表达式，
-                # 这样后端生成逻辑会简单很多，也更容易测试。
                 self._ensure_const_expr(global_decl.initializer)
 
+        # 第三遍：逐函数分析
         for function in self.functions.values():
             self._analyze_function(function)
 
     def _analyze_function(self, function: ast.FunctionDecl) -> None:
+        self._current_return_void = (function.return_type.base == "void" and function.return_type.pointer_level == 0)
         self.variables.push()
         for param in function.params:
             if not self.variables.define(Symbol(param.name, "variable")):
@@ -63,8 +82,8 @@ class SemanticAnalyzer:
         self._visit_stmt(function.body)
         self.variables.pop()
 
-        if not self._saw_return:
-            # 第一代先采用更严格的规则：每个函数都必须显式写 return。
+        # void 函数不强制要求显式 return
+        if not self._saw_return and not self._current_return_void:
             self._error(function, f"function '{function.name}' must contain a return statement")
 
     def _visit_stmt(self, stmt: ast.Statement) -> None:
@@ -96,7 +115,9 @@ class SemanticAnalyzer:
 
         if isinstance(stmt, ast.WhileStmt):
             self._visit_expr(stmt.condition)
+            self._loop_depth += 1
             self._visit_stmt(stmt.body)
+            self._loop_depth -= 1
             return
 
         if isinstance(stmt, ast.ForStmt):
@@ -107,15 +128,29 @@ class SemanticAnalyzer:
                 self._visit_expr(stmt.condition)
             if stmt.update is not None:
                 self._visit_expr(stmt.update)
+            self._loop_depth += 1
             self._visit_stmt(stmt.body)
+            self._loop_depth -= 1
             self.variables.pop()
             return
 
         if isinstance(stmt, ast.ReturnStmt):
             self._saw_return = True
             if stmt.value is None:
-                self._error(stmt, "return value is required in the first-generation compiler")
+                if not self._current_return_void:
+                    self._error(stmt, "return value is required in non-void function")
+                return
             self._visit_expr(stmt.value)
+            return
+
+        if isinstance(stmt, ast.BreakStmt):
+            if self._loop_depth == 0:
+                self._error(stmt, "break outside of loop")
+            return
+
+        if isinstance(stmt, ast.ContinueStmt):
+            if self._loop_depth == 0:
+                self._error(stmt, "continue outside of loop")
             return
 
         raise AssertionError(f"unhandled statement type: {type(stmt)!r}")
@@ -148,19 +183,35 @@ class SemanticAnalyzer:
             return
         if isinstance(expr, ast.AssignExpr):
             if not self._is_assignable_target(expr.target):
-                # 对二期支持的左值来说，允许名字、解引用和数组索引三类形式。
                 self._error(expr.target, "assignment target must be a variable, dereference, or indexed element")
             self._visit_expr(expr.target)
             self._visit_expr(expr.value)
             return
         if isinstance(expr, ast.CallExpr):
             symbol = self.variables.lookup(expr.callee)
-            if symbol is None or symbol.kind != "function":
+            if symbol is None:
                 self._error(expr, f"undefined function '{expr.callee}'")
-            if symbol.arity != len(expr.args):
-                self._error(expr, f"function '{expr.callee}' expects {symbol.arity} arguments but got {len(expr.args)}")
+            if symbol.kind != "function":
+                self._error(expr, f"'{expr.callee}' is not a function")
+            # arity == -1 表示可变参数函数，不检查参数数量
+            if symbol.arity is not None and symbol.arity >= 0:
+                if symbol.arity != len(expr.args):
+                    self._error(expr, f"function '{expr.callee}' expects {symbol.arity} arguments but got {len(expr.args)}")
             for arg in expr.args:
                 self._visit_expr(arg)
+            return
+        if isinstance(expr, ast.CastExpr):
+            self._visit_expr(expr.operand)
+            return
+        if isinstance(expr, ast.SizeofExpr):
+            if expr.expr is not None:
+                self._visit_expr(expr.expr)
+            return
+        if isinstance(expr, ast.MemberExpr):
+            self._visit_expr(expr.target)
+            return
+        if isinstance(expr, ast.PostfixIncDecExpr):
+            self._visit_expr(expr.operand)
             return
         raise AssertionError(f"unhandled expression type: {type(expr)!r}")
 
@@ -170,6 +221,8 @@ class SemanticAnalyzer:
         if isinstance(expr, ast.IndexExpr):
             return True
         if isinstance(expr, ast.UnaryExpr) and expr.operator == "*":
+            return True
+        if isinstance(expr, ast.MemberExpr):
             return True
         return False
 
@@ -196,14 +249,6 @@ class SemanticAnalyzer:
         raise SemanticError(f"{message} at {node.line}:{node.column}")
 
     def _install_builtin_functions(self) -> None:
-        """注册编译器内建函数。
-
-        当前只提供最小能力：
-        - `print_int(int)`：把整数结果输出到标准输出并原样返回
-
-        这样可以给示例程序提供可见输出，而不用先扩展完整标准库或头文件机制。
-        """
-
         self.variables.define(Symbol("print_int", "function", arity=1))
 
 

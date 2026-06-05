@@ -19,22 +19,59 @@ class Program(Node):
 
 @dataclass(slots=True)
 class CType:
-    """表示一个足够小但可扩展的 C 类型描述。
+    """表示一个 C 类型描述。
 
-    - `base` 目前支持 `int` 和 `char`
-    - `pointer_level` 表示指针层级，例如 `char**` 为 2
-    - `array_size` 用于固定长度数组
+    - `base`: "int" / "char" / "void" / "struct" / typedef 别名
+    - `pointer_level`: 指针层级，例如 `char**` 为 2
+    - `array_size`: 固定长度数组大小
+    - `struct_name`: 当 base=="struct" 时存储结构体 tag 名
     """
 
     base: str
     pointer_level: int = 0
     array_size: int | None = None
+    struct_name: str | None = None
 
 
 @dataclass(slots=True)
 class Parameter(Node):
     ctype: CType
     name: str
+
+
+@dataclass(slots=True)
+class StructField(Node):
+    ctype: CType
+    name: str
+
+
+@dataclass(slots=True)
+class StructDecl(Node):
+    """struct 定义，兼容三种形式：
+    - struct Tag { ... };                  → tag="Tag", alias=None
+    - typedef struct Tag { ... } Alias;   → tag="Tag", alias="Alias"
+    - typedef struct { ... } Alias;       → tag=None,  alias="Alias"
+    """
+    tag: str | None
+    alias: str | None
+    fields: "list[StructField] | None"
+
+
+@dataclass(slots=True)
+class TypedefDecl(Node):
+    """typedef existing_type Alias; 不带 struct 体的简单别名。"""
+    ctype: CType
+    alias: str
+
+
+@dataclass(slots=True)
+class FuncPrototype(Node):
+    """函数声明（无函数体），对应 extern 或前向声明。"""
+    return_type: CType
+    name: str
+    params: "list[Parameter]"
+    is_variadic: bool = False
+    is_extern: bool = False
 
 
 @dataclass(slots=True)
@@ -52,7 +89,7 @@ class FunctionDecl(Node):
     body: "Block"
 
 
-TopLevelDecl = GlobalVarDecl | FunctionDecl
+TopLevelDecl = GlobalVarDecl | FunctionDecl | StructDecl | TypedefDecl | FuncPrototype
 
 
 @dataclass(slots=True)
@@ -101,6 +138,16 @@ class ForStmt(Statement):
 @dataclass(slots=True)
 class ReturnStmt(Statement):
     value: "Expression | None"
+
+
+@dataclass(slots=True)
+class BreakStmt(Statement):
+    pass
+
+
+@dataclass(slots=True)
+class ContinueStmt(Statement):
+    pass
 
 
 @dataclass(slots=True)
@@ -157,6 +204,35 @@ class IndexExpr(Expression):
 class AssignExpr(Expression):
     target: Expression
     value: Expression
+
+
+@dataclass(slots=True)
+class CastExpr(Expression):
+    """(CType)operand"""
+    ctype: CType
+    operand: Expression
+
+
+@dataclass(slots=True)
+class SizeofExpr(Expression):
+    """sizeof(type) 或 sizeof(expr)，二者必有一个非 None。"""
+    ctype: CType | None
+    expr: "Expression | None"
+
+
+@dataclass(slots=True)
+class MemberExpr(Expression):
+    """target.member 或 target->member"""
+    target: Expression
+    member: str
+    arrow: bool
+
+
+@dataclass(slots=True)
+class PostfixIncDecExpr(Expression):
+    """operand++ 或 operand--"""
+    operand: Expression
+    op: str
 
 
 def format_ast(node: Node) -> str:

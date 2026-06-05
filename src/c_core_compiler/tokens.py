@@ -17,6 +17,13 @@ class TokenKind(Enum):
 
     KW_INT = auto()
     KW_CHAR = auto()
+    KW_VOID = auto()
+    KW_STRUCT = auto()
+    KW_TYPEDEF = auto()
+    KW_SIZEOF = auto()
+    KW_BREAK = auto()
+    KW_CONTINUE = auto()
+    KW_EXTERN = auto()
     KW_IF = auto()
     KW_ELSE = auto()
     KW_WHILE = auto()
@@ -40,6 +47,7 @@ class TokenKind(Enum):
     BANG = auto()
     AMPERSAND = auto()
     ASSIGN = auto()
+    DOT = auto()
 
     EQ = auto()
     NE = auto()
@@ -49,11 +57,22 @@ class TokenKind(Enum):
     GE = auto()
     AND = auto()
     OR = auto()
+    ARROW = auto()
+    PLUS_PLUS = auto()
+    MINUS_MINUS = auto()
+    ELLIPSIS = auto()
 
 
 KEYWORDS = {
     "int": TokenKind.KW_INT,
     "char": TokenKind.KW_CHAR,
+    "void": TokenKind.KW_VOID,
+    "struct": TokenKind.KW_STRUCT,
+    "typedef": TokenKind.KW_TYPEDEF,
+    "sizeof": TokenKind.KW_SIZEOF,
+    "break": TokenKind.KW_BREAK,
+    "continue": TokenKind.KW_CONTINUE,
+    "extern": TokenKind.KW_EXTERN,
     "if": TokenKind.KW_IF,
     "else": TokenKind.KW_ELSE,
     "while": TokenKind.KW_WHILE,

@@ -53,8 +53,7 @@ class Lexer:
                 continue
 
             if ch.isdigit():
-                # 第一代只支持十进制整数字面量，因此这里保持最简单的整数扫描逻辑。
-                text = self._scan_integer()
+                text = self._scan_number()
                 tokens.append(Token(TokenKind.INTEGER, text, start_line, start_column))
                 continue
 
@@ -68,8 +67,16 @@ class Lexer:
                 tokens.append(Token(TokenKind.STRING_LITERAL, text, start_line, start_column))
                 continue
 
+            three_char = self.source[self.index : self.index + 3]
+            if three_char == "...":
+                self._advance()
+                self._advance()
+                self._advance()
+                tokens.append(Token(TokenKind.ELLIPSIS, "...", start_line, start_column))
+                continue
+
             two_char = self.source[self.index : self.index + 2]
-            if two_char in {"==", "!=", "<=", ">=", "&&", "||"}:
+            if two_char in {"==", "!=", "<=", ">=", "&&", "||", "->", "++", "--"}:
                 # 双字符运算符必须先识别，否则会被拆成两个单字符 Token。
                 self._advance()
                 self._advance()
@@ -121,10 +128,16 @@ class Lexer:
             self._advance()
         return self.source[start:self.index]
 
-    def _scan_integer(self) -> str:
+    def _scan_number(self) -> str:
         start = self.index
-        while not self._at_end() and self._peek().isdigit():
-            self._advance()
+        if self._peek() == "0" and self.index + 1 < len(self.source) and self.source[self.index + 1] in "xX":
+            self._advance()  # '0'
+            self._advance()  # 'x' or 'X'
+            while not self._at_end() and self._peek() in "0123456789abcdefABCDEF":
+                self._advance()
+        else:
+            while not self._at_end() and self._peek().isdigit():
+                self._advance()
         return self.source[start:self.index]
 
     def _scan_char_literal(self) -> str:
@@ -196,6 +209,7 @@ _SINGLE_CHAR_TOKENS = {
     "=": TokenKind.ASSIGN,
     "<": TokenKind.LT,
     ">": TokenKind.GT,
+    ".": TokenKind.DOT,
 }
 
 _DOUBLE_CHAR_TOKENS = {
@@ -205,4 +219,7 @@ _DOUBLE_CHAR_TOKENS = {
     ">=": TokenKind.GE,
     "&&": TokenKind.AND,
     "||": TokenKind.OR,
+    "->": TokenKind.ARROW,
+    "++": TokenKind.PLUS_PLUS,
+    "--": TokenKind.MINUS_MINUS,
 }

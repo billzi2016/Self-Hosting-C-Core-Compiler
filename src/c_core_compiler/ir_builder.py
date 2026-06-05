@@ -253,27 +253,36 @@ class IRBuilder:
 
 def _requires_ast_backend(program: ast.Program) -> bool:
     for decl in program.declarations:
+        # struct / typedef / 函数原型 都需要 AST 后端
+        if isinstance(decl, (ast.StructDecl, ast.TypedefDecl, ast.FuncPrototype)):
+            return True
         if isinstance(decl, ast.GlobalVarDecl):
             if _type_requires_ast_backend(decl.ctype):
                 return True
             if decl.initializer is not None and _expr_requires_ast_backend(decl.initializer):
                 return True
             continue
-        if _type_requires_ast_backend(decl.return_type):
-            return True
-        for param in decl.params:
-            if _type_requires_ast_backend(param.ctype):
+        if isinstance(decl, ast.FunctionDecl):
+            if _type_requires_ast_backend(decl.return_type):
                 return True
-        if _stmt_requires_ast_backend(decl.body):
-            return True
+            for param in decl.params:
+                if _type_requires_ast_backend(param.ctype):
+                    return True
+            if _stmt_requires_ast_backend(decl.body):
+                return True
     return False
 
 
 def _type_requires_ast_backend(ctype: ast.CType) -> bool:
-    return ctype.base != "int" or ctype.pointer_level > 0 or ctype.array_size is not None
+    if ctype.base not in ("int",):
+        return True
+    return ctype.pointer_level > 0 or ctype.array_size is not None
 
 
 def _stmt_requires_ast_backend(stmt: ast.Statement) -> bool:
+    # break / continue 只有 AST 后端能处理
+    if isinstance(stmt, (ast.BreakStmt, ast.ContinueStmt)):
+        return True
     if isinstance(stmt, ast.Block):
         return any(_stmt_requires_ast_backend(item) for item in stmt.items)
     if isinstance(stmt, ast.VarDeclStmt):
@@ -303,10 +312,14 @@ def _stmt_requires_ast_backend(stmt: ast.Statement) -> bool:
 
 
 def _expr_requires_ast_backend(expr: ast.Expression) -> bool:
-    if isinstance(expr, (ast.CharLiteral, ast.StringLiteral, ast.IndexExpr)):
+    if isinstance(expr, (ast.CharLiteral, ast.StringLiteral, ast.IndexExpr,
+                         ast.CastExpr, ast.SizeofExpr, ast.MemberExpr,
+                         ast.PostfixIncDecExpr)):
         return True
     if isinstance(expr, ast.UnaryExpr):
-        return expr.operator in {"&", "*"} or _expr_requires_ast_backend(expr.operand)
+        if expr.operator in {"&", "*", "++", "--"}:
+            return True
+        return _expr_requires_ast_backend(expr.operand)
     if isinstance(expr, ast.BinaryExpr):
         return _expr_requires_ast_backend(expr.left) or _expr_requires_ast_backend(expr.right)
     if isinstance(expr, ast.AssignExpr):

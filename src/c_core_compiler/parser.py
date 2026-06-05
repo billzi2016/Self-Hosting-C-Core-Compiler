@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from . import ast_nodes as ast
 from .tokens import Token, TokenKind
@@ -14,14 +14,12 @@ class ParseError(ValueError):
 
 @dataclass(slots=True)
 class Parser:
-    """一个故意保持显式控制流的手写语法分析器。
-
-    这里优先保证读者能看出每个语法规则是如何落到代码里的，
-    而不是把规则隐藏在复杂抽象后面。
-    """
+    """一个故意保持显式控制流的手写语法分析器。"""
 
     tokens: list[Token]
     index: int = 0
+    typedef_names: set[str] = field(default_factory=set)
+    struct_names: set[str] = field(default_factory=set)
 
     def parse_program(self) -> ast.Program:
         declarations: list[ast.TopLevelDecl] = []
@@ -31,13 +29,41 @@ class Parser:
         return ast.Program(first.line, first.column, declarations)
 
     def _parse_top_level_decl(self) -> ast.TopLevelDecl:
-        # 第一代顶层只支持两类声明：
-        # 1. 全局变量声明
-        # 2. 函数定义
+        # typedef struct / typedef existing_type
+        if self._match(TokenKind.KW_TYPEDEF):
+            return self._parse_typedef()
+
+        is_extern = self._match(TokenKind.KW_EXTERN)
+
         type_token, base_type = self._parse_type_spec()
+
+        # struct Tag { ... }; — 纯结构体定义（无后续声明名）
+        if base_type.base == "struct" and self._check(TokenKind.LBRACE):
+            fields = self._parse_struct_body()
+            if base_type.struct_name:
+                self.struct_names.add(base_type.struct_name)
+            struct_decl = ast.StructDecl(
+                type_token.line, type_token.column,
+                tag=base_type.struct_name, alias=None, fields=fields,
+            )
+            if self._check(TokenKind.SEMICOLON):
+                self._consume(TokenKind.SEMICOLON, "expected ';' after struct definition")
+                return struct_decl
+            # struct Tag { ... } varname; — 继续解析变量声明
+            base_type = ast.CType("struct", struct_name=base_type.struct_name)
+
         name, decl_type = self._parse_declarator(base_type)
+
         if self._match(TokenKind.LPAREN):
-            params = self._parse_parameters()
+            params, is_variadic = self._parse_parameters_ext()
+            if self._check(TokenKind.SEMICOLON):
+                # 函数原型（无函数体）
+                self._consume(TokenKind.SEMICOLON, "expected ';'")
+                return ast.FuncPrototype(
+                    type_token.line, type_token.column,
+                    return_type=decl_type, name=name,
+                    params=params, is_variadic=is_variadic, is_extern=is_extern,
+                )
             body = self._parse_block()
             return ast.FunctionDecl(type_token.line, type_token.column, decl_type, name, params, body)
 
@@ -47,18 +73,88 @@ class Parser:
         self._consume(TokenKind.SEMICOLON, "expected ';' after global declaration")
         return ast.GlobalVarDecl(type_token.line, type_token.column, decl_type, name, initializer)
 
-    def _parse_parameters(self) -> list[ast.Parameter]:
+    # ── typedef 解析 ─────────────────────────────────────────────────────────
+
+    def _parse_typedef(self) -> ast.StructDecl | ast.TypedefDecl:
+        token = self._previous()
+
+        if self._match(TokenKind.KW_STRUCT):
+            # typedef struct [Tag] { ... } Alias;
+            tag: str | None = None
+            if self._check(TokenKind.IDENTIFIER):
+                tag = self._peek().value
+                self._consume(TokenKind.IDENTIFIER, "")
+
+            fields: list[ast.StructField] | None = None
+            if self._match(TokenKind.LBRACE):
+                fields = self._parse_struct_fields_until_rbrace()
+
+            alias_tok = self._consume(TokenKind.IDENTIFIER, "expected typedef alias name")
+            self._consume(TokenKind.SEMICOLON, "expected ';' after typedef")
+            self.typedef_names.add(alias_tok.value)
+            if tag:
+                self.struct_names.add(tag)
+            return ast.StructDecl(token.line, token.column, tag=tag, alias=alias_tok.value, fields=fields)
+
+        # typedef existing_type [*...] Alias;
+        _, base_type = self._parse_type_spec()
+        name, decl_type = self._parse_declarator(base_type)
+        self._consume(TokenKind.SEMICOLON, "expected ';' after typedef")
+        self.typedef_names.add(name)
+        return ast.TypedefDecl(token.line, token.column, ctype=decl_type, alias=name)
+
+    # ── struct 体 ─────────────────────────────────────────────────────────────
+
+    def _parse_struct_body(self) -> list[ast.StructField]:
+        self._consume(TokenKind.LBRACE, "expected '{' to start struct body")
+        return self._parse_struct_fields_until_rbrace()
+
+    def _parse_struct_fields_until_rbrace(self) -> list[ast.StructField]:
+        fields: list[ast.StructField] = []
+        while not self._check(TokenKind.RBRACE):
+            if self._check(TokenKind.EOF):
+                raise self._error(self._peek(), "unterminated struct body")
+            field_type_tok, field_base = self._parse_type_spec()
+            field_name, field_ctype = self._parse_declarator(field_base)
+            self._consume(TokenKind.SEMICOLON, "expected ';' after struct field")
+            fields.append(ast.StructField(field_type_tok.line, field_type_tok.column, field_ctype, field_name))
+        self._consume(TokenKind.RBRACE, "expected '}' to end struct body")
+        return fields
+
+    # ── 参数列表（支持 ...） ───────────────────────────────────────────────────
+
+    def _parse_parameters_ext(self) -> tuple[list[ast.Parameter], bool]:
+        """返回 (params, is_variadic)。"""
         params: list[ast.Parameter] = []
+        is_variadic = False
+
         if self._match(TokenKind.RPAREN):
-            return params
+            return params, is_variadic
 
         while True:
+            if self._match(TokenKind.ELLIPSIS):
+                is_variadic = True
+                self._consume(TokenKind.RPAREN, "expected ')' after '...'")
+                return params, is_variadic
+
             type_token, base_type = self._parse_type_spec()
+            # void 单参数 → 空参数列表：func(void)
+            if base_type.base == "void" and self._check(TokenKind.RPAREN):
+                self._consume(TokenKind.RPAREN, "")
+                return params, is_variadic
+
             name, decl_type = self._parse_declarator(base_type)
             params.append(ast.Parameter(type_token.line, type_token.column, decl_type, name))
+
             if self._match(TokenKind.RPAREN):
-                return params
+                return params, is_variadic
             self._consume(TokenKind.COMMA, "expected ',' between parameters")
+
+    def _parse_parameters(self) -> list[ast.Parameter]:
+        params, _ = self._parse_parameters_ext()
+        return params
+
+    # ── 语句 ─────────────────────────────────────────────────────────────────
 
     def _parse_block(self) -> ast.Block:
         left_brace = self._consume(TokenKind.LBRACE, "expected '{' to start a block")
@@ -69,8 +165,6 @@ class Parser:
         return ast.Block(left_brace.line, left_brace.column, items)
 
     def _parse_statement(self) -> ast.Statement:
-        # 这里按“最容易区分的起始 Token”来分派语句类型，
-        # 这样读起来最接近手工分析语法的过程。
         if self._check(TokenKind.LBRACE):
             return self._parse_block()
         if self._match(TokenKind.KW_IF):
@@ -81,7 +175,15 @@ class Parser:
             return self._parse_for()
         if self._match(TokenKind.KW_RETURN):
             return self._parse_return()
-        if self._check(TokenKind.KW_INT, TokenKind.KW_CHAR):
+        if self._match(TokenKind.KW_BREAK):
+            token = self._previous()
+            self._consume(TokenKind.SEMICOLON, "expected ';' after break")
+            return ast.BreakStmt(token.line, token.column)
+        if self._match(TokenKind.KW_CONTINUE):
+            token = self._previous()
+            self._consume(TokenKind.SEMICOLON, "expected ';' after continue")
+            return ast.ContinueStmt(token.line, token.column)
+        if self._is_type_start():
             type_token, base_type = self._parse_type_spec()
             return self._parse_var_decl_after_type(type_token.line, type_token.column, base_type)
         if self._match(TokenKind.SEMICOLON):
@@ -116,9 +218,7 @@ class Parser:
         init: ast.Statement | None
         if self._match(TokenKind.SEMICOLON):
             init = None
-        elif self._check(TokenKind.KW_INT, TokenKind.KW_CHAR):
-            # for 的初始化部分允许直接写变量声明，例如：
-            # for (int i = 0; i < 10; i = i + 1)
+        elif self._is_type_start():
             type_token, base_type = self._parse_type_spec()
             init = self._parse_var_decl_after_type(type_token.line, type_token.column, base_type)
         else:
@@ -154,13 +254,14 @@ class Parser:
         self._consume(TokenKind.SEMICOLON, "expected ';' after variable declaration")
         return ast.VarDeclStmt(line, column, decl_type, name, initializer)
 
+    # ── 表达式 ────────────────────────────────────────────────────────────────
+
     def _parse_expression(self) -> ast.Expression:
         return self._parse_assignment()
 
     def _parse_assignment(self) -> ast.Expression:
         expr = self._parse_logical_or()
         if self._match(TokenKind.ASSIGN):
-            # 赋值是右结合的，因此右边仍然递归走 assignment。
             value = self._parse_assignment()
             return ast.AssignExpr(expr.line, expr.column, expr, value)
         return expr
@@ -214,6 +315,11 @@ class Parser:
         return expr
 
     def _parse_unary(self) -> ast.Expression:
+        # 前缀 ++ / --
+        if self._match(TokenKind.PLUS_PLUS, TokenKind.MINUS_MINUS):
+            operator = self._previous()
+            operand = self._parse_unary()
+            return ast.UnaryExpr(operator.line, operator.column, operator.value, operand)
         if self._match(TokenKind.PLUS, TokenKind.MINUS, TokenKind.BANG, TokenKind.AMPERSAND, TokenKind.STAR):
             operator = self._previous()
             operand = self._parse_unary()
@@ -233,7 +339,6 @@ class Parser:
                         if not self._match(TokenKind.COMMA):
                             break
                 right_paren = self._consume(TokenKind.RPAREN, "expected ')' after arguments")
-                # 当前版本只支持“按名字调用函数”，不支持函数指针调用。
                 expr = ast.CallExpr(right_paren.line, right_paren.column, expr.identifier, args)
                 continue
             if self._match(TokenKind.LBRACKET):
@@ -241,13 +346,30 @@ class Parser:
                 right_bracket = self._consume(TokenKind.RBRACKET, "expected ']' after index expression")
                 expr = ast.IndexExpr(right_bracket.line, right_bracket.column, expr, index)
                 continue
+            if self._match(TokenKind.DOT):
+                member_tok = self._consume(TokenKind.IDENTIFIER, "expected member name after '.'")
+                expr = ast.MemberExpr(member_tok.line, member_tok.column, expr, member_tok.value, arrow=False)
+                continue
+            if self._match(TokenKind.ARROW):
+                member_tok = self._consume(TokenKind.IDENTIFIER, "expected member name after '->'")
+                expr = ast.MemberExpr(member_tok.line, member_tok.column, expr, member_tok.value, arrow=True)
+                continue
+            if self._match(TokenKind.PLUS_PLUS):
+                op_tok = self._previous()
+                expr = ast.PostfixIncDecExpr(op_tok.line, op_tok.column, expr, "++")
+                continue
+            if self._match(TokenKind.MINUS_MINUS):
+                op_tok = self._previous()
+                expr = ast.PostfixIncDecExpr(op_tok.line, op_tok.column, expr, "--")
+                continue
             break
         return expr
 
     def _parse_primary(self) -> ast.Expression:
         if self._match(TokenKind.INTEGER):
             token = self._previous()
-            return ast.IntLiteral(token.line, token.column, int(token.value))
+            value = int(token.value, 16) if token.value.startswith(("0x", "0X")) else int(token.value)
+            return ast.IntLiteral(token.line, token.column, value)
         if self._match(TokenKind.CHAR_LITERAL):
             token = self._previous()
             return ast.CharLiteral(token.line, token.column, token.value)
@@ -257,12 +379,100 @@ class Parser:
         if self._match(TokenKind.IDENTIFIER):
             token = self._previous()
             return ast.Name(token.line, token.column, token.value)
+        if self._match(TokenKind.KW_SIZEOF):
+            return self._parse_sizeof()
         if self._match(TokenKind.LPAREN):
+            # 判断是类型转换 (Type)expr 还是分组表达式 (expr)
+            if self._is_type_start():
+                return self._parse_cast_from_open_paren()
             expr = self._parse_expression()
             self._consume(TokenKind.RPAREN, "expected ')' after expression")
             return expr
         token = self._peek()
         raise self._error(token, f"unexpected token {token.kind.name}")
+
+    def _parse_sizeof(self) -> ast.SizeofExpr:
+        token = self._previous()
+        self._consume(TokenKind.LPAREN, "expected '(' after sizeof")
+        if self._is_type_start():
+            ctype = self._parse_type_for_cast()
+            self._consume(TokenKind.RPAREN, "expected ')' after sizeof type")
+            return ast.SizeofExpr(token.line, token.column, ctype=ctype, expr=None)
+        expr = self._parse_expression()
+        self._consume(TokenKind.RPAREN, "expected ')'")
+        return ast.SizeofExpr(token.line, token.column, ctype=None, expr=expr)
+
+    def _parse_cast_from_open_paren(self) -> ast.CastExpr:
+        """调用时已消耗 '('，当前位置在类型名起始处。"""
+        ctype = self._parse_type_for_cast()
+        tok = self._consume(TokenKind.RPAREN, "expected ')' after cast type")
+        operand = self._parse_unary()
+        return ast.CastExpr(tok.line, tok.column, ctype, operand)
+
+    def _parse_type_for_cast(self) -> ast.CType:
+        """解析一个完整的类型（含指针层级），用于 cast 和 sizeof。"""
+        _, base = self._parse_type_spec()
+        pointer_level = 0
+        while self._match(TokenKind.STAR):
+            pointer_level += 1
+        return ast.CType(base.base, pointer_level=pointer_level, struct_name=base.struct_name)
+
+    # ── 类型解析工具 ─────────────────────────────────────────────────────────
+
+    def _is_type_start(self) -> bool:
+        """当前 token 是否可以作为类型声明的开头。"""
+        k = self._peek().kind
+        if k in (TokenKind.KW_INT, TokenKind.KW_CHAR, TokenKind.KW_VOID,
+                 TokenKind.KW_STRUCT, TokenKind.KW_EXTERN):
+            return True
+        if k == TokenKind.IDENTIFIER and self._peek().value in self.typedef_names:
+            return True
+        return False
+
+    def _parse_type_spec(self) -> tuple[Token, ast.CType]:
+        if self._match(TokenKind.KW_INT):
+            return self._previous(), ast.CType("int")
+        if self._match(TokenKind.KW_CHAR):
+            return self._previous(), ast.CType("char")
+        if self._match(TokenKind.KW_VOID):
+            return self._previous(), ast.CType("void")
+        if self._match(TokenKind.KW_STRUCT):
+            token = self._previous()
+            tag: str | None = None
+            if self._check(TokenKind.IDENTIFIER):
+                tag = self._peek().value
+                self._consume(TokenKind.IDENTIFIER, "")
+            return token, ast.CType("struct", struct_name=tag)
+        if self._check(TokenKind.IDENTIFIER) and self._peek().value in self.typedef_names:
+            token = self._consume(TokenKind.IDENTIFIER, "")
+            return token, ast.CType(token.value)
+        token = self._peek()
+        raise self._error(token, "expected type specifier")
+
+    def _parse_declarator(self, base_type: ast.CType) -> tuple[str, ast.CType]:
+        pointer_level = 0
+        while self._match(TokenKind.STAR):
+            pointer_level += 1
+
+        name_token = self._consume(TokenKind.IDENTIFIER, "expected declarator name")
+        array_size = None
+        if self._match(TokenKind.LBRACKET):
+            if self._check(TokenKind.RBRACKET):
+                self._consume(TokenKind.RBRACKET, "expected ']' after array declarator")
+            else:
+                size_token = self._consume(TokenKind.INTEGER, "expected array size integer")
+                array_size = int(size_token.value)
+                self._consume(TokenKind.RBRACKET, "expected ']' after array size")
+
+        decl_type = ast.CType(
+            base_type.base,
+            pointer_level=pointer_level,
+            array_size=array_size,
+            struct_name=base_type.struct_name,
+        )
+        return name_token.value, decl_type
+
+    # ── 底层工具 ─────────────────────────────────────────────────────────────
 
     def _match(self, *kinds: TokenKind) -> bool:
         if self._check(*kinds):
@@ -287,31 +497,3 @@ class Parser:
 
     def _error(self, token: Token, message: str) -> ParseError:
         return ParseError(f"{message} at {token.line}:{token.column}")
-
-    def _parse_type_spec(self) -> tuple[Token, ast.CType]:
-        if self._match(TokenKind.KW_INT):
-            token = self._previous()
-            return token, ast.CType("int")
-        if self._match(TokenKind.KW_CHAR):
-            token = self._previous()
-            return token, ast.CType("char")
-        token = self._peek()
-        raise self._error(token, "expected type specifier")
-
-    def _parse_declarator(self, base_type: ast.CType) -> tuple[str, ast.CType]:
-        pointer_level = 0
-        while self._match(TokenKind.STAR):
-            pointer_level += 1
-
-        name_token = self._consume(TokenKind.IDENTIFIER, "expected declarator name")
-        array_size = None
-        if self._match(TokenKind.LBRACKET):
-            if self._check(TokenKind.RBRACKET):
-                self._consume(TokenKind.RBRACKET, "expected ']' after array declarator")
-            else:
-                size_token = self._consume(TokenKind.INTEGER, "expected array size integer")
-                array_size = int(size_token.value)
-                self._consume(TokenKind.RBRACKET, "expected ']' after array size")
-
-        decl_type = ast.CType(base_type.base, pointer_level=pointer_level, array_size=array_size)
-        return name_token.value, decl_type
