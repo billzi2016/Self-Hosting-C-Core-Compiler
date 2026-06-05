@@ -76,7 +76,7 @@ class Lexer:
                 continue
 
             two_char = self.source[self.index : self.index + 2]
-            if two_char in {"==", "!=", "<=", ">=", "&&", "||", "->", "++", "--"}:
+            if two_char in _DOUBLE_CHAR_TOKENS:
                 # 双字符运算符必须先识别，否则会被拆成两个单字符 Token。
                 self._advance()
                 self._advance()
@@ -206,10 +206,15 @@ _SINGLE_CHAR_TOKENS = {
     "%": TokenKind.PERCENT,
     "!": TokenKind.BANG,
     "&": TokenKind.AMPERSAND,
+    "|": TokenKind.PIPE,
+    "^": TokenKind.CARET,
+    "~": TokenKind.TILDE,
     "=": TokenKind.ASSIGN,
     "<": TokenKind.LT,
     ">": TokenKind.GT,
     ".": TokenKind.DOT,
+    ":": TokenKind.COLON,
+    "?": TokenKind.QUESTION,
 }
 
 _DOUBLE_CHAR_TOKENS = {
@@ -222,4 +227,10 @@ _DOUBLE_CHAR_TOKENS = {
     "->": TokenKind.ARROW,
     "++": TokenKind.PLUS_PLUS,
     "--": TokenKind.MINUS_MINUS,
+    "<<": TokenKind.LSHIFT,
+    ">>": TokenKind.RSHIFT,
+    "+=": TokenKind.PLUS_ASSIGN,
+    "-=": TokenKind.MINUS_ASSIGN,
+    "*=": TokenKind.STAR_ASSIGN,
+    "/=": TokenKind.SLASH_ASSIGN,
 }

@@ -46,8 +46,13 @@ class TokenKind(Enum):
     PERCENT = auto()
     BANG = auto()
     AMPERSAND = auto()
+    PIPE = auto()
+    CARET = auto()
+    TILDE = auto()
     ASSIGN = auto()
     DOT = auto()
+    COLON = auto()
+    QUESTION = auto()
 
     EQ = auto()
     NE = auto()
@@ -61,6 +66,12 @@ class TokenKind(Enum):
     PLUS_PLUS = auto()
     MINUS_MINUS = auto()
     ELLIPSIS = auto()
+    LSHIFT = auto()
+    RSHIFT = auto()
+    PLUS_ASSIGN = auto()
+    MINUS_ASSIGN = auto()
+    STAR_ASSIGN = auto()
+    SLASH_ASSIGN = auto()
 
 
 KEYWORDS = {

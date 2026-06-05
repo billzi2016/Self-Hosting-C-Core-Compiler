@@ -260,10 +260,28 @@ class Parser:
         return self._parse_assignment()
 
     def _parse_assignment(self) -> ast.Expression:
-        expr = self._parse_logical_or()
+        expr = self._parse_ternary()
         if self._match(TokenKind.ASSIGN):
             value = self._parse_assignment()
             return ast.AssignExpr(expr.line, expr.column, expr, value)
+        # compound assignment: += -= *= /=
+        if self._match(
+            TokenKind.PLUS_ASSIGN, TokenKind.MINUS_ASSIGN,
+            TokenKind.STAR_ASSIGN, TokenKind.SLASH_ASSIGN,
+        ):
+            op_tok = self._previous()
+            value = self._parse_assignment()
+            return ast.AssignExpr(expr.line, expr.column, expr, value, op=op_tok.value)
+        return expr
+
+    def _parse_ternary(self) -> ast.Expression:
+        expr = self._parse_logical_or()
+        if self._match(TokenKind.QUESTION):
+            q_tok = self._previous()
+            then_expr = self._parse_expression()
+            self._consume(TokenKind.COLON, "expected ':' in ternary expression")
+            else_expr = self._parse_ternary()
+            return ast.TernaryExpr(q_tok.line, q_tok.column, expr, then_expr, else_expr)
         return expr
 
     def _parse_logical_or(self) -> ast.Expression:
@@ -275,8 +293,32 @@ class Parser:
         return expr
 
     def _parse_logical_and(self) -> ast.Expression:
-        expr = self._parse_equality()
+        expr = self._parse_bitor()
         while self._match(TokenKind.AND):
+            operator = self._previous()
+            right = self._parse_bitor()
+            expr = ast.BinaryExpr(operator.line, operator.column, operator.value, expr, right)
+        return expr
+
+    def _parse_bitor(self) -> ast.Expression:
+        expr = self._parse_bitxor()
+        while self._match(TokenKind.PIPE):
+            operator = self._previous()
+            right = self._parse_bitxor()
+            expr = ast.BinaryExpr(operator.line, operator.column, operator.value, expr, right)
+        return expr
+
+    def _parse_bitxor(self) -> ast.Expression:
+        expr = self._parse_bitand()
+        while self._match(TokenKind.CARET):
+            operator = self._previous()
+            right = self._parse_bitand()
+            expr = ast.BinaryExpr(operator.line, operator.column, operator.value, expr, right)
+        return expr
+
+    def _parse_bitand(self) -> ast.Expression:
+        expr = self._parse_equality()
+        while self._match(TokenKind.AMPERSAND):
             operator = self._previous()
             right = self._parse_equality()
             expr = ast.BinaryExpr(operator.line, operator.column, operator.value, expr, right)
@@ -291,8 +333,16 @@ class Parser:
         return expr
 
     def _parse_comparison(self) -> ast.Expression:
-        expr = self._parse_additive()
+        expr = self._parse_shift()
         while self._match(TokenKind.LT, TokenKind.LE, TokenKind.GT, TokenKind.GE):
+            operator = self._previous()
+            right = self._parse_shift()
+            expr = ast.BinaryExpr(operator.line, operator.column, operator.value, expr, right)
+        return expr
+
+    def _parse_shift(self) -> ast.Expression:
+        expr = self._parse_additive()
+        while self._match(TokenKind.LSHIFT, TokenKind.RSHIFT):
             operator = self._previous()
             right = self._parse_additive()
             expr = ast.BinaryExpr(operator.line, operator.column, operator.value, expr, right)
@@ -320,7 +370,10 @@ class Parser:
             operator = self._previous()
             operand = self._parse_unary()
             return ast.UnaryExpr(operator.line, operator.column, operator.value, operand)
-        if self._match(TokenKind.PLUS, TokenKind.MINUS, TokenKind.BANG, TokenKind.AMPERSAND, TokenKind.STAR):
+        if self._match(
+            TokenKind.PLUS, TokenKind.MINUS, TokenKind.BANG,
+            TokenKind.AMPERSAND, TokenKind.STAR, TokenKind.TILDE,
+        ):
             operator = self._previous()
             operand = self._parse_unary()
             return ast.UnaryExpr(operator.line, operator.column, operator.value, operand)
@@ -456,6 +509,7 @@ class Parser:
 
         name_token = self._consume(TokenKind.IDENTIFIER, "expected declarator name")
         array_size = None
+        array_size2 = None
         if self._match(TokenKind.LBRACKET):
             if self._check(TokenKind.RBRACKET):
                 self._consume(TokenKind.RBRACKET, "expected ']' after array declarator")
@@ -463,11 +517,16 @@ class Parser:
                 size_token = self._consume(TokenKind.INTEGER, "expected array size integer")
                 array_size = int(size_token.value)
                 self._consume(TokenKind.RBRACKET, "expected ']' after array size")
+            if self._match(TokenKind.LBRACKET):
+                size_token2 = self._consume(TokenKind.INTEGER, "expected array size integer")
+                array_size2 = int(size_token2.value)
+                self._consume(TokenKind.RBRACKET, "expected ']' after array size")
 
         decl_type = ast.CType(
             base_type.base,
             pointer_level=pointer_level,
             array_size=array_size,
+            array_size2=array_size2,
             struct_name=base_type.struct_name,
         )
         return name_token.value, decl_type

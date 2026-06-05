@@ -314,15 +314,19 @@ def _stmt_requires_ast_backend(stmt: ast.Statement) -> bool:
 def _expr_requires_ast_backend(expr: ast.Expression) -> bool:
     if isinstance(expr, (ast.CharLiteral, ast.StringLiteral, ast.IndexExpr,
                          ast.CastExpr, ast.SizeofExpr, ast.MemberExpr,
-                         ast.PostfixIncDecExpr)):
+                         ast.PostfixIncDecExpr, ast.TernaryExpr)):
         return True
     if isinstance(expr, ast.UnaryExpr):
-        if expr.operator in {"&", "*", "++", "--"}:
+        if expr.operator in {"&", "*", "++", "--", "~"}:
             return True
         return _expr_requires_ast_backend(expr.operand)
     if isinstance(expr, ast.BinaryExpr):
+        if expr.operator in {"&", "|", "^", "<<", ">>"}:
+            return True
         return _expr_requires_ast_backend(expr.left) or _expr_requires_ast_backend(expr.right)
     if isinstance(expr, ast.AssignExpr):
+        if expr.op != "=":
+            return True
         return _expr_requires_ast_backend(expr.target) or _expr_requires_ast_backend(expr.value)
     if isinstance(expr, ast.CallExpr):
         return any(_expr_requires_ast_backend(arg) for arg in expr.args)

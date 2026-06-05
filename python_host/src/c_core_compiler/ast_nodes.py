@@ -30,6 +30,7 @@ class CType:
     base: str
     pointer_level: int = 0
     array_size: int | None = None
+    array_size2: int | None = None
     struct_name: str | None = None
 
 
@@ -204,6 +205,15 @@ class IndexExpr(Expression):
 class AssignExpr(Expression):
     target: Expression
     value: Expression
+    op: str = "="   # "=" | "+=" | "-=" | "*=" | "/="
+
+
+@dataclass(slots=True)
+class TernaryExpr(Expression):
+    """cond ? then_expr : else_expr"""
+    cond: Expression
+    then_expr: Expression
+    else_expr: Expression
 
 
 @dataclass(slots=True)

@@ -418,6 +418,7 @@ struct Node {
     char type_base[32];
     int  type_ptr;
     int  type_arr;
+    int  type_arr2;
     char struct_name[32];
     int  type_is_void;
 
@@ -1050,6 +1051,13 @@ int parse_top_level() {
             advance();
             if (cur_kind()==TK_INT_LIT) { arr=atoi(cur_val()); advance(); }
             expect(TK_RBRACKET);
+            if (cur_kind()==TK_LBRACKET) {
+                int arr2; advance();
+                arr2=0;
+                if (cur_kind()==TK_INT_LIT) { arr2=atoi(cur_val()); advance(); }
+                expect(TK_RBRACKET);
+                g_nodes[gn].type_arr2=arr2;
+            }
         }
         g_nodes[gn].type_arr=arr;
         if (cur_kind()==TK_EQ) { advance(); node_add_child(gn,parse_expr()); }
@@ -1079,6 +1087,9 @@ void emit_type(int n, char *varname) {
     if (varname!=(char*)0) emit(varname);
     if (g_nodes[n].type_arr>0) {
         emit("["); sprintf(buf,"%d",g_nodes[n].type_arr); emit(buf); emit("]");
+        if (g_nodes[n].type_arr2>0) {
+            emit("["); sprintf(buf,"%d",g_nodes[n].type_arr2); emit(buf); emit("]");
+        }
     }
 }
 
@@ -1344,7 +1355,7 @@ void emit_program(int prog) {
 
 /* ── main ────────────────────────────────────────────────────────────────── */
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
     char *src_path; char *out_path;
     void *fp; int src_len; char *src;
     char cmd[1024]; char tmp_c[256];

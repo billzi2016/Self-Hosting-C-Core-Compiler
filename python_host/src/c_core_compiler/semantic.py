@@ -213,6 +213,11 @@ class SemanticAnalyzer:
         if isinstance(expr, ast.PostfixIncDecExpr):
             self._visit_expr(expr.operand)
             return
+        if isinstance(expr, ast.TernaryExpr):
+            self._visit_expr(expr.cond)
+            self._visit_expr(expr.then_expr)
+            self._visit_expr(expr.else_expr)
+            return
         raise AssertionError(f"unhandled expression type: {type(expr)!r}")
 
     def _is_assignable_target(self, expr: ast.Expression) -> bool:

@@ -13,6 +13,8 @@ _HEADER = (
     "#include <stdlib.h>\n"
     "#include <string.h>\n"
     "#include <stdint.h>\n"
+    "#include <unistd.h>\n"
+    "#include <ctype.h>\n"
     "\n"
 )
 
@@ -114,10 +116,11 @@ def _emit_from_ast(program: ast.Program, meta: BackendMeta) -> str:
     if any(isinstance(d, ast.GlobalVarDecl) for d in program.declarations):
         lines.append("\n")
 
-    # 3. 函数原型（extern 声明 + 函数前向声明）
+    # 3. 函数原型（仅前向声明，跳过 extern，因为 #include 已经引入了）
     for decl in program.declarations:
         if isinstance(decl, ast.FuncPrototype):
-            lines.append(_render_func_proto(decl) + ";\n")
+            if not decl.is_extern:
+                lines.append(_render_func_proto(decl) + ";\n")
         elif isinstance(decl, ast.FunctionDecl):
             ret = _render_type(decl.return_type)
             params = _render_params(decl.params)
@@ -152,7 +155,10 @@ def _render_type(ctype: ast.CType) -> str:
 def _render_decl(ctype: ast.CType, name: str) -> str:
     base = _render_type(ast.CType(ctype.base, pointer_level=ctype.pointer_level, struct_name=ctype.struct_name))
     if ctype.array_size is not None:
-        return f"{base} {name}[{ctype.array_size}]"
+        dims = f"[{ctype.array_size}]"
+        if ctype.array_size2 is not None:
+            dims += f"[{ctype.array_size2}]"
+        return f"{base} {name}{dims}"
     return f"{base} {name}"
 
 
@@ -280,7 +286,9 @@ def _render_expr(expr: ast.Expression) -> str:
         args = ", ".join(_render_expr(a) for a in expr.args)
         return f"{expr.callee}({args})"
     if isinstance(expr, ast.AssignExpr):
-        return f"({_render_expr(expr.target)} = {_render_expr(expr.value)})"
+        return f"({_render_expr(expr.target)} {expr.op} {_render_expr(expr.value)})"
+    if isinstance(expr, ast.TernaryExpr):
+        return f"({_render_expr(expr.cond)} ? {_render_expr(expr.then_expr)} : {_render_expr(expr.else_expr)})"
     if isinstance(expr, ast.IndexExpr):
         return f"{_render_expr(expr.target)}[{_render_expr(expr.index)}]"
     if isinstance(expr, ast.MemberExpr):

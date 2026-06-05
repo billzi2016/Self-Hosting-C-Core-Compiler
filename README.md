@@ -17,9 +17,9 @@ Gen 2 (g2): C 二进制       →  编译 bootstrap/compiler.c  →  compiler_g3
 | M1 | 扩展 Python 编译器（void/struct/typedef/extern/++/cast/sizeof/hex） | ✅ |
 | M2 | 编写 `bootstrap/compiler.c` | ✅ |
 | M3 | 建立测试套件（basic + LeetCode），15/15 通过 | ✅ |
-| M4 | g0 编译 compiler.c 成功（g1 可运行） | 进行中 |
-| M5 | g1 编译 compiler.c 成功（g2 可运行） | 待开始 |
-| M6 | g2 == g3，自举完全稳定 | 待开始 |
+| M4 | g0 编译 compiler.c 成功（g1 可运行） | ✅ |
+| M5 | g1 编译 compiler.c 成功（g2 可运行） | ✅ |
+| M6 | g2 == g3，自举完全稳定 | ✅ |
 
 ---
 
@@ -81,10 +81,17 @@ python3 -m c_core_compiler ../tests/c/basic/hello.c -o ../build/hello
 ../build/hello
 ```
 
+### 编译所有示例
+
+```bash
+# 编译 examples/ 下的全部 .c 文件到 build/examples/
+./build_examples.sh
+```
+
 ### 运行自举脚本
 
 ```bash
-# 先构建 compiler_g1，再验证 g2 == g3
+# Gen0(Python)→g1→g2→g3，验证 g2/g3 输出相同
 bash bootstrap/bootstrap.sh
 ```
 
