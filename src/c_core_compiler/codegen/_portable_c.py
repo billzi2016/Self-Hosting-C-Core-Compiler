@@ -16,7 +16,13 @@ def emit_portable_c(program: IRProgram, meta: BackendMeta) -> str:
         " * The output is normalized C, not native assembly.",
         " * This keeps the first generation readable and cross-platform. */",
         "",
+        "#include <stdio.h>",
         "#include <stdint.h>",
+        "",
+        "int print_int(int value) {",
+        '    printf("%d\\n", value);',
+        "    return value;",
+        "}",
         "",
     ]
 
@@ -96,7 +102,13 @@ def _emit_portable_c_from_ast(program: ast.Program, meta: BackendMeta) -> str:
         " * This path is used for advanced language features such as char,",
         " * strings, arrays and pointers. */",
         "",
+        "#include <stdio.h>",
         "#include <stdint.h>",
+        "",
+        "int print_int(int value) {",
+        '    printf("%d\\n", value);',
+        "    return value;",
+        "}",
         "",
     ]
 

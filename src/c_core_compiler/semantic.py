@@ -28,6 +28,7 @@ class SemanticAnalyzer:
         self.functions: dict[str, ast.FunctionDecl] = {}
         self.globals: dict[str, ast.GlobalVarDecl] = {}
         self.variables = SymbolTable()
+        self._install_builtin_functions()
 
         for decl in self.program.declarations:
             if isinstance(decl, ast.GlobalVarDecl):
@@ -193,6 +194,17 @@ class SemanticAnalyzer:
 
     def _error(self, node: ast.Node, message: str) -> None:
         raise SemanticError(f"{message} at {node.line}:{node.column}")
+
+    def _install_builtin_functions(self) -> None:
+        """注册编译器内建函数。
+
+        当前只提供最小能力：
+        - `print_int(int)`：把整数结果输出到标准输出并原样返回
+
+        这样可以给示例程序提供可见输出，而不用先扩展完整标准库或头文件机制。
+        """
+
+        self.variables.define(Symbol("print_int", "function", arity=1))
 
 
 def _evaluate_binary(operator: str, left: int, right: int) -> int:

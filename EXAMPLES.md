@@ -36,6 +36,20 @@
 
 验证字符串字面量和字符指针索引。
 
+## 带标准输出的示例
+
+这些文件和原始示例逻辑基本一致，但会调用内建函数 `print_int(int)`，
+把结果直接打印到标准输出，便于公开展示和手工验证：
+
+- `examples/hello_stdout.c`
+- `examples/factorial_stdout.c`
+- `examples/fib_stdout.c`
+- `examples/control_flow_demo_stdout.c`
+- `examples/char_demo_stdout.c`
+- `examples/array_demo_stdout.c`
+- `examples/pointer_demo_stdout.c`
+- `examples/string_demo_stdout.c`
+
 ## 常用命令
 
 编译普通示例：
@@ -48,6 +62,13 @@ python3 -m c_core_compiler examples/hello.c -o build/hello
 
 ```bash
 python3 -m c_core_compiler examples/pointer_demo.c -o build/pointer_demo
+```
+
+编译并运行带输出的指针示例：
+
+```bash
+python3 -m c_core_compiler examples/pointer_demo_stdout.c -o build/pointer_demo_stdout
+./build/pointer_demo_stdout
 ```
 
 输出 IR：

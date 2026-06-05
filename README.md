@@ -56,6 +56,13 @@ python3 -m c_core_compiler examples/hello.c -o build/hello
 ./build/hello
 ```
 
+如果你想直接看到标准输出结果，建议运行带 `_stdout` 后缀的示例：
+
+```bash
+python3 -m c_core_compiler examples/fib_stdout.c -o build/fib_stdout
+./build/fib_stdout
+```
+
 ## 常用命令
 
 输出 Token：
@@ -90,6 +97,124 @@ python3 -m c_core_compiler examples/hello.c --emit-asm
 
 第一代中，`--emit-asm` 会输出当前后端生成的规范化 C 代码。这是为了保留统一的调试入口，后续如果替换为原生汇编后端，该参数可以继续沿用。
 
+## 示例运行命令
+
+### 基础示例
+
+`hello.c`
+
+```bash
+python3 -m c_core_compiler examples/hello.c -o build/hello
+./build/hello
+```
+
+`factorial.c`
+
+```bash
+python3 -m c_core_compiler examples/factorial.c -o build/factorial
+./build/factorial
+```
+
+`fib.c`
+
+```bash
+python3 -m c_core_compiler examples/fib.c -o build/fib
+./build/fib
+```
+
+`control_flow_demo.c`
+
+```bash
+python3 -m c_core_compiler examples/control_flow_demo.c -o build/control_flow_demo
+./build/control_flow_demo
+```
+
+`char_demo.c`
+
+```bash
+python3 -m c_core_compiler examples/char_demo.c -o build/char_demo
+./build/char_demo
+```
+
+`array_demo.c`
+
+```bash
+python3 -m c_core_compiler examples/array_demo.c -o build/array_demo
+./build/array_demo
+```
+
+`pointer_demo.c`
+
+```bash
+python3 -m c_core_compiler examples/pointer_demo.c -o build/pointer_demo
+./build/pointer_demo
+```
+
+`string_demo.c`
+
+```bash
+python3 -m c_core_compiler examples/string_demo.c -o build/string_demo
+./build/string_demo
+```
+
+### 带标准输出的示例
+
+`hello_stdout.c`
+
+```bash
+python3 -m c_core_compiler examples/hello_stdout.c -o build/hello_stdout
+./build/hello_stdout
+```
+
+`factorial_stdout.c`
+
+```bash
+python3 -m c_core_compiler examples/factorial_stdout.c -o build/factorial_stdout
+./build/factorial_stdout
+```
+
+`fib_stdout.c`
+
+```bash
+python3 -m c_core_compiler examples/fib_stdout.c -o build/fib_stdout
+./build/fib_stdout
+```
+
+`control_flow_demo_stdout.c`
+
+```bash
+python3 -m c_core_compiler examples/control_flow_demo_stdout.c -o build/control_flow_demo_stdout
+./build/control_flow_demo_stdout
+```
+
+`char_demo_stdout.c`
+
+```bash
+python3 -m c_core_compiler examples/char_demo_stdout.c -o build/char_demo_stdout
+./build/char_demo_stdout
+```
+
+`array_demo_stdout.c`
+
+```bash
+python3 -m c_core_compiler examples/array_demo_stdout.c -o build/array_demo_stdout
+./build/array_demo_stdout
+```
+
+`pointer_demo_stdout.c`
+
+```bash
+python3 -m c_core_compiler examples/pointer_demo_stdout.c -o build/pointer_demo_stdout
+./build/pointer_demo_stdout
+```
+
+`string_demo_stdout.c`
+
+```bash
+python3 -m c_core_compiler examples/string_demo_stdout.c -o build/string_demo_stdout
+./build/string_demo_stdout
+```
+
 ## 目录说明
 
 - `src/c_core_compiler/`：编译器实现
@@ -105,5 +230,7 @@ python3 -m c_core_compiler examples/hello.c --emit-asm
 - `EXAMPLES.md`：示例说明与常用命令
 
 ## 致谢
+
+感谢《编译原理》这本书，它帮助我建立了更系统的编译器知识框架。
 
 感谢 `https://pandolia.net/tinyc/`，它让我对编译原理有了更深入的实践性理解，也帮助我更清楚地思考如何把编译流程拆成可实现、可验证、可持续迭代的工程结构。

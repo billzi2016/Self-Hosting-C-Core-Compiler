@@ -4,5 +4,6 @@ char next_char(char value) {
 
 int main() {
     char c = 'A';
-    return next_char(c) - 'A';
+    print_int(next_char(c) - 'A');
+    return 0;
 }

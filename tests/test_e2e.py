@@ -125,6 +125,21 @@ class EndToEndTests(unittest.TestCase):
             result = subprocess.run([str(output)], check=False)
             self.assertEqual(result.returncode, 105)
 
+    def test_builtin_print_int_writes_stdout(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            int main() {
+                return print_int(7);
+            }
+            """
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "print_case"
+            ToolchainDriver(detect_default_target()).build_executable(artifacts.optimized_program, output)
+            result = subprocess.run([str(output)], check=False, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 7)
+            self.assertEqual(result.stdout, "7\n")
+
 
 if __name__ == "__main__":
     unittest.main()
