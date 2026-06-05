@@ -7,12 +7,17 @@ __pycache__/
 dist/
 .venv/
 
-# Build artifacts (compiled binaries)
+# Build artifacts (compiled binaries only, keep generated .c and result files)
 build/compiler_g1
 build/compiler_g2
 build/compiler_g3
 build/compiler_native
 build/a.out
+# 忽略 build/examples/ 下的二进制，保留 .generated.c
+build/examples/*
+!build/examples/*.generated.c
+# 忽略 build/results_stdout/ 下的二进制 program，保留其他输出文件
+build/results_stdout/**/program
 
 # Temp files
 /tmp/
