@@ -40,6 +40,27 @@ class EndToEndTests(unittest.TestCase):
             result = subprocess.run([str(output)], check=False)
             self.assertEqual(result.returncode, 6)
 
+    def test_builds_and_runs_recursive_program(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            int fib(int n) {
+                if (n < 2) {
+                    return n;
+                }
+                return fib(n - 1) + fib(n - 2);
+            }
+
+            int main() {
+                return fib(6);
+            }
+            """
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "fib_case"
+            ToolchainDriver(detect_default_target()).build_executable(artifacts.optimized_program, output)
+            result = subprocess.run([str(output)], check=False)
+            self.assertEqual(result.returncode, 8)
+
 
 if __name__ == "__main__":
     unittest.main()

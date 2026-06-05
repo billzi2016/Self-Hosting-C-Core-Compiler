@@ -53,6 +53,20 @@ class SemanticTests(unittest.TestCase):
             """
         )
 
+    def test_accepts_block_scope_shadowing(self) -> None:
+        analyze(
+            """
+            int main() {
+                int value = 1;
+                {
+                    int value = 2;
+                    value = value + 1;
+                }
+                return value;
+            }
+            """
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

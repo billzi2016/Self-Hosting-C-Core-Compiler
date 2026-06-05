@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from .ast_nodes import format_ast
-from .ir import format_ir
+from .ir import format_ir, format_ir_dot
 from .pipeline import compile_source, parse_source, tokenize_source
 from .toolchain import ToolchainDriver, detect_default_target
 
@@ -19,6 +19,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--emit-tokens", action="store_true", help="print tokens and exit")
     parser.add_argument("--emit-ast", action="store_true", help="print AST and exit")
     parser.add_argument("--emit-ir", action="store_true", help="print IR and exit")
+    parser.add_argument("--emit-ir-dot", action="store_true", help="print IR graph in DOT format and exit")
     parser.add_argument("--emit-c", action="store_true", help="print generated backend C and exit")
     parser.add_argument("--emit-asm", action="store_true", help="alias of --emit-c in the first generation")
     return parser
@@ -41,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
     artifacts = compile_source(source)
     if args.emit_ir:
         print(format_ir(artifacts.optimized_program))
+        return 0
+    if args.emit_ir_dot:
+        print(format_ir_dot(artifacts.optimized_program))
         return 0
 
     driver = ToolchainDriver(args.target)

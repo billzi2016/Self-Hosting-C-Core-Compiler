@@ -43,6 +43,16 @@ class CLITests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("func main", buffer.getvalue())
 
+    def test_emit_ir_dot_prints_graphviz_text(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = Path(tmp) / "sample.c"
+            source_path.write_text("int main() { return 0; }", encoding="utf-8")
+            buffer = io.StringIO()
+            with redirect_stdout(buffer):
+                exit_code = main([str(source_path), "--emit-ir-dot"])
+            self.assertEqual(exit_code, 0)
+            self.assertIn("digraph IR", buffer.getvalue())
+
     def test_missing_output_or_emit_mode_is_an_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             source_path = Path(tmp) / "sample.c"

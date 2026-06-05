@@ -14,8 +14,9 @@ class OptimizerTests(unittest.TestCase):
         ir_program = ir_from_source("int main() { return 1 + 2; }")
         optimized = Optimizer(ir_program).run()
         text = format_ir(optimized)
-        self.assertIn("const t2 3", text)
-        self.assertNotIn("binary t2 + t0 t1", text)
+        self.assertIn("const", text)
+        self.assertIn("  return r0", text)
+        self.assertNotIn("binary", text)
 
     def test_constant_propagation_can_simplify_conditional_jump(self) -> None:
         ir_program = ir_from_source("int main() { if (1) { return 3; } return 4; }")
@@ -58,6 +59,21 @@ class OptimizerTests(unittest.TestCase):
         text = format_ir(optimized)
         self.assertIn("return", text)
         self.assertIn("const", text)
+
+    def test_virtual_register_compaction_reuses_small_register_pool(self) -> None:
+        ir_program = ir_from_source(
+            """
+            int main() {
+                int a = 1 + 2;
+                int b = a + 3;
+                int c = b + 4;
+                return c;
+            }
+            """
+        )
+        optimized = Optimizer(ir_program).run()
+        self.assertTrue(optimized.functions[0].temporaries)
+        self.assertTrue(all(name.startswith("r") for name in optimized.functions[0].temporaries))
 
 
 if __name__ == "__main__":

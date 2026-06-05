@@ -31,7 +31,8 @@ class Optimizer:
     def _optimize_function(self, function: IRFunction) -> IRFunction:
         folded = self._fold_constants(function)
         reachable = self._prune_unreachable(folded)
-        return reachable
+        allocated = self._compact_temporaries(reachable)
+        return allocated
 
     def _fold_constants(self, function: IRFunction) -> IRFunction:
         """在函数内部做保守常量传播和常量折叠。
@@ -167,6 +168,65 @@ class Optimizer:
             instructions=pruned,
         )
 
+    def _compact_temporaries(self, function: IRFunction) -> IRFunction:
+        """把大量一次性临时变量压缩成少量可复用的虚拟寄存器名。
+
+        这里不是机器级寄存器分配，而是一个线性、可解释的虚拟寄存器复用：
+        如果某个临时变量的最后一次使用已经过去，就允许后续临时变量复用它的名字。
+        这样生成结果更紧凑，也为以后替换成更低层后端留出接口。
+        """
+
+        temp_names = {name for name in function.temporaries}
+        if not temp_names:
+            return function
+
+        last_use: dict[str, int] = {}
+        definitions: list[tuple[int, str]] = []
+
+        for index, instruction in enumerate(function.instructions):
+            defs, uses = _instruction_def_use(instruction, temp_names)
+            for name in uses:
+                last_use[name] = index
+            for name in defs:
+                definitions.append((index, name))
+                last_use.setdefault(name, index)
+
+        free_names: list[str] = []
+        mapping: dict[str, str] = {}
+        active_until: list[tuple[str, int]] = []
+        next_register_index = 0
+
+        for index, original in definitions:
+            for active_name, until in list(active_until):
+                if until < index:
+                    free_names.append(active_name)
+                    active_until.remove((active_name, until))
+
+            if original in mapping:
+                continue
+
+            if free_names:
+                virtual_name = free_names.pop(0)
+            else:
+                virtual_name = f"r{next_register_index}"
+                next_register_index += 1
+
+            mapping[original] = virtual_name
+            active_until.append((virtual_name, last_use[original]))
+
+        rewritten = [
+            IRInstruction(instruction.opcode, tuple(mapping.get(arg, arg) for arg in instruction.args))
+            for instruction in function.instructions
+        ]
+
+        return IRFunction(
+            name=function.name,
+            params=function.params,
+            locals=function.locals,
+            temporaries=[f"r{i}" for i in range(next_register_index)],
+            instructions=rewritten,
+        )
+
 
 def _eval_unary(operator: str, operand: int) -> int:
     if operator == "+":
@@ -176,3 +236,29 @@ def _eval_unary(operator: str, operand: int) -> int:
     if operator == "!":
         return int(not operand)
     raise AssertionError(f"unsupported unary operator: {operator}")
+
+
+def _instruction_def_use(instruction: IRInstruction, temporaries: set[str]) -> tuple[list[str], list[str]]:
+    op = instruction.opcode
+    args = instruction.args
+
+    if op == "const":
+        return [args[0]], []
+    if op == "copy":
+        return [args[0]], [args[1]] if args[1] in temporaries else []
+    if op == "load":
+        return [args[0]], []
+    if op == "store":
+        return [], [args[1]] if args[1] in temporaries else []
+    if op == "unary":
+        return [args[0]], [args[2]] if args[2] in temporaries else []
+    if op == "binary":
+        uses = [arg for arg in (args[2], args[3]) if arg in temporaries]
+        return [args[0]], uses
+    if op == "call":
+        return [args[0]], [arg for arg in args[2:] if arg in temporaries]
+    if op == "cjump":
+        return [], [args[0]] if args[0] in temporaries else []
+    if op == "return":
+        return [], [args[0]] if args[0] in temporaries else []
+    return [], []
