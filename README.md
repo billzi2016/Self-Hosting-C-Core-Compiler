@@ -70,6 +70,23 @@ python3 -m c_core_compiler examples/fib_sequence_stdout.c -o build/fib_sequence_
 ./build/fib_sequence_stdout
 ```
 
+## `return` 与 `stdout` 的区别
+
+这个项目里的示例分成两类，目的不同：
+
+- `return` 型示例：通过进程退出码表达结果，更适合做编译器正确性验证、脚本检查和自动化测试
+- `stdout` 型示例：通过标准输出直接打印结果，更适合给人看，也更适合公开展示
+
+对应到构建结果目录就是：
+
+- `build/results_return/`：重点看 `exit.txt`
+- `build/results_stdout/`：重点看 `stdout.txt`
+
+例如：
+
+- `fib.c` 的结果是 `return fib(6);`，所以退出码是 `8`
+- `fib_sequence_stdout.c` 会把 `1 1 2 3 5 8 13` 按行打印出来，因此更适合直接展示
+
 ## 常用命令
 
 输出 Token：
